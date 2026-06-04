@@ -8,10 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Braiins API credentials — never expose these outside the backend
-    braiins_api_key_id: str
-    braiins_api_secret: str
-    braiins_org_id: str
+    # Braiins API key — never expose this outside the backend
+    braiins_api_key: str
 
     # Strategy parameters (all editable at runtime via /api/settings)
     top_n: int = 5
@@ -34,18 +32,17 @@ class Settings(BaseSettings):
     def clamp_poll_interval(cls, v: int) -> int:
         return max(30, v)
 
-    @field_validator("braiins_api_key_id", "braiins_api_secret", "braiins_org_id")
+    @field_validator("braiins_api_key")
     @classmethod
     def must_not_be_placeholder(cls, v: str) -> str:
         if v.startswith("your_"):
-            raise ValueError("Replace placeholder values in .env before starting")
+            raise ValueError("Replace BRAIINS_API_KEY placeholder in .env before starting")
         return v
 
     def safe_dict(self) -> dict:
         """Return settings dict with credentials redacted — safe for logging."""
         d = self.model_dump()
-        for field in ("braiins_api_key_id", "braiins_api_secret", "braiins_org_id"):
-            d[field] = "***"
+        d["braiins_api_key"] = "***"
         return d
 
 

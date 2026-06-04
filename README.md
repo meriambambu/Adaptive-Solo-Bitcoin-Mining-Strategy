@@ -97,12 +97,12 @@ Dashboard opens at `http://localhost:5173`.
 
 All settings live in `backend/.env` (never committed). Copy from `backend/.env.example`.
 
-### Getting Your API Keys
+### Getting Your API Key
 
 1. Log in to [hashpower.braiins.com](https://hashpower.braiins.com)
-2. Go to **Account → API Keys → Generate New Key**
-3. Copy the **Key ID**, **Secret**, and your **Organisation ID**
-4. Verify the exact request-signing format by opening `hashpower.braiins.com/api/` in your browser → Authorize → run a test request → inspect the Network tab
+2. Go to **Account → Settings → API Keys → Generate New Key**
+3. Copy the single API key value into `BRAIINS_API_KEY` in `backend/.env`
+4. If you get 401 errors, open `hashpower.braiins.com/api/` → Authorize → run a test request → check the Network tab to confirm the exact header name
 
 ### Strategy Parameters
 
@@ -218,14 +218,14 @@ If you fork or contribute to this project:
 
 ## Troubleshooting
 
-**Backend fails to start with "Replace placeholder values in .env"**
-→ Open `backend/.env` and replace all `your_*_here` values with real credentials.
+**Backend fails to start with "Replace BRAIINS_API_KEY placeholder"**
+→ Open `backend/.env` and set `BRAIINS_API_KEY` to your actual key from the Braiins dashboard.
 
 **Strategy runs but prices never change**
 → Confirm `STRATEGY_ENABLED=true` in `.env` and check the Strategy Log panel for `IDLE` entries (means no active orders).
 
 **Order updates fail with 401/403**
-→ The HMAC signature format may differ slightly from the inferred pattern. Open `hashpower.braiins.com/api/` in a browser, authorise with your keys, execute a request, and compare the `X-Auth` header against `backend/app/braiins/client.py:_build_signature`.
+→ Open `hashpower.braiins.com/api/` in a browser, click Authorize, paste your key, execute a request, and check the Network tab. If the header is `X-Api-Key` instead of `Authorization: Bearer`, update `_auth_headers()` in [backend/app/braiins/client.py](backend/app/braiins/client.py).
 
 **WebSocket shows "Connecting…"**
 → Ensure the backend is running on port 8000. The Vite dev proxy handles `/ws` automatically in development.

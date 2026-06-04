@@ -1,15 +1,14 @@
 """
 Authenticated async HTTP client for the Braiins Hash Power marketplace API.
 
-Authentication uses HMAC-SHA256 request signing (same pattern as NiceHash v2).
-Verify the exact signature format by opening https://hashpower.braiins.com/api/
-→ Authorize → execute a test request → inspect the Network tab for actual headers.
+Authentication uses a single API key passed as a Bearer token.
+Generate your key at: hashpower.braiins.com → Account → Settings → API Keys
+
+If requests return 401, open https://hashpower.braiins.com/api/ in your browser,
+click Authorize, paste your key, fire a test request, and check the Network tab
+to confirm the exact header name used (Bearer vs X-Api-Key, etc.).
 """
 
-import hashlib
-import hmac
-import time
-import uuid
 import logging
 from decimal import Decimal
 from typing import Any, Optional
@@ -31,52 +30,10 @@ BASE_URL = "https://hashpower.braiins.com"
 ALGORITHM = "SHA256"
 
 
-def _build_signature(
-    api_key_id: str,
-    api_secret: str,
-    request_id: str,
-    ts: str,
-    nonce: str,
-    method: str,
-    path: str,
-    query: str = "",
-    body: str = "",
-) -> str:
-    """Build HMAC-SHA256 signature for Braiins API authentication."""
-    msg = "\0".join([
-        api_key_id, ts, nonce, "", "", "", "",
-        f"{method}\n{path}\n{query}\n{body}",
-    ])
-    digest = hmac.new(
-        api_secret.encode("utf-8"),
-        msg.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    return digest
-
-
-def _auth_headers(method: str, path: str, query: str = "", body: str = "") -> dict[str, str]:
+def _auth_headers() -> dict[str, str]:
     cfg = get_settings()
-    request_id = str(uuid.uuid4())
-    ts = str(int(time.time() * 1000))
-    nonce = str(uuid.uuid4())
-    sig = _build_signature(
-        cfg.braiins_api_key_id,
-        cfg.braiins_api_secret,
-        request_id,
-        ts,
-        nonce,
-        method,
-        path,
-        query,
-        body,
-    )
     return {
-        "X-Request-Id": request_id,
-        "X-Time": ts,
-        "X-Nonce": nonce,
-        "X-Organization-Id": cfg.braiins_org_id,
-        "X-Auth": f"{cfg.braiins_api_key_id}:{sig}",
+        "Authorization": f"Bearer {cfg.braiins_api_key}",
         "Content-Type": "application/json",
     }
 
@@ -91,32 +48,22 @@ class BraiinsClient:
         await self._client.aclose()
 
     async def _get(self, path: str, params: Optional[dict] = None) -> Any:
-        query = "&".join(f"{k}={v}" for k, v in (params or {}).items())
-        headers = _auth_headers("GET", path, query)
-        url = path + (f"?{query}" if query else "")
-        resp = await self._client.get(url, headers=headers)
+        resp = await self._client.get(path, params=params, headers=_auth_headers())
         resp.raise_for_status()
         return resp.json()
 
     async def _post(self, path: str, payload: dict) -> Any:
-        import json
-        body = json.dumps(payload, separators=(",", ":"))
-        headers = _auth_headers("POST", path, "", body)
-        resp = await self._client.post(path, content=body, headers=headers)
+        resp = await self._client.post(path, json=payload, headers=_auth_headers())
         resp.raise_for_status()
         return resp.json()
 
     async def _put(self, path: str, payload: dict) -> Any:
-        import json
-        body = json.dumps(payload, separators=(",", ":"))
-        headers = _auth_headers("PUT", path, "", body)
-        resp = await self._client.put(path, content=body, headers=headers)
+        resp = await self._client.put(path, json=payload, headers=_auth_headers())
         resp.raise_for_status()
         return resp.json()
 
     async def _delete(self, path: str) -> None:
-        headers = _auth_headers("DELETE", path)
-        resp = await self._client.delete(path, headers=headers)
+        resp = await self._client.delete(path, headers=_auth_headers())
         resp.raise_for_status()
 
     # ── Orders ────────────────────────────────────────────────────────────────
