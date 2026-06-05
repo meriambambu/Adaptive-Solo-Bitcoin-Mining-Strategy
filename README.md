@@ -8,12 +8,16 @@ An open-source adaptive bidding bot and real-time dashboard for the [Braiins Has
 
 ## Features
 
-- **Adaptive bidding** — raises price when falling out of top N, lowers it when overpriced
-- **Hard price cap** — never bids above your `MAX_BID_PRICE`, protecting your budget
+- **Adaptive bidding** — hysteresis-based RAISE / HOLD / LOWER using UPPER\_BUFFER, LOWER\_MARGIN, and PRICE\_STEP
+- **Hard price rails** — never bids above `MAX_BID_PRICE` or below `MIN_BID_PRICE`
 - **Real-time dashboard** — Vue 3 + Tailwind dark UI with live WebSocket updates
-- **Order book view** — top-20 bids with your position highlighted in green
-- **Strategy log** — full audit trail of every price adjustment decision
-- **Always-on scheduler** — APScheduler runs every configurable interval (default: 60s)
+- **Order book** — bids in green, asks in red, spread bar; your position auto-highlighted
+- **Active worker cards** — per-bid hashrate breakdown (5 min / 1 hr / 24 h from snapshot history)
+- **Notable shares log** — live feed from Braiins Solo Pool with difficulty progress vs network target
+- **BTC network difficulty** — live in the header, auto-refreshes every 5 minutes
+- **Block celebration** — full-screen overlay + audio when a block is solved (see [Audio](#audio))
+- **Strategy log** — full audit trail of every RAISE / LOWER / HOLD / IDLE decision
+- **Always-on scheduler** — APScheduler full cycle + fast raise-only rank check
 - **Manual trigger** — run a strategy evaluation instantly from the dashboard
 - **Open source & secure** — credentials live only in `.env`, never logged or committed
 
@@ -129,6 +133,32 @@ Port:      3333
 Username:  your_bitcoin_address.worker_name
 ```
 
+Also set `SOLO_WALLET` in `.env` to your BTC payout address so the dashboard can fetch your notable shares and pool stats from `solo.braiins.com`. This value is used **server-side only** and is never returned by any API endpoint.
+
+---
+
+## Audio
+
+When a block is solved (share difficulty ≥ network difficulty), the dashboard plays a celebration sound.
+
+**The audio file is copyrighted and is not included in this repository.**
+
+### To enable full audio:
+
+1. Obtain a legal copy of your preferred celebration track (e.g. *We Are the Champions* by Queen).
+2. Name the file `champions.mp3`.
+3. Place it at `frontend/public/champions.mp3`.
+
+```
+frontend/
+└── public/
+    └── champions.mp3   ← place here manually
+```
+
+> `frontend/public/*.mp3` is listed in `.gitignore` and will **never** be committed.
+
+If the file is absent the dashboard automatically falls back to a synthesised melody via the Web Audio API — no file is required for the fallback.
+
 ---
 
 ## How the Strategy Works
@@ -169,12 +199,15 @@ Every POLL_INTERVAL seconds:
 
 | Panel | Description |
 |---|---|
-| **Current Bids** | Live table of your orders: price, budget, speed, ETA, progress ring |
-| **Order Book** | Top-20 public bids; top-N highlighted green, your P_N shown |
+| **Current Bids** | Live table of your orders: price, budget, speed, progress ring |
+| **Active Workers** | Per-bid cards with 5-min / 1-hr / 24-hr hashrate from snapshot history |
+| **Bid History** | Fulfilled / cancelled order history with filter tabs |
+| **Order Book** | Bids (green) + asks (red) with spread bar; your bids highlighted purple |
 | **Strategy Settings** | Edit all parameters live; enable/disable; manual trigger |
 | **Strategy Log** | Timestamped log of every RAISE / LOWER / HOLD / IDLE decision |
-| **Balance Bar** | Available BTC, total balance, pending |
-| **WS indicator** | Green "Live" / red "Connecting" dot in header |
+| **Notable Shares** | Solo pool notable share feed with difficulty bar vs network target |
+| **Balance Bar** | Available BTC, total balance, blocked |
+| **Header** | BTC network difficulty (auto-refresh) + WebSocket Live indicator |
 
 ---
 
@@ -182,12 +215,17 @@ Every POLL_INTERVAL seconds:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/orders` | List your orders |
+| GET | `/api/orders` | List your active orders |
+| GET | `/api/orders/workers` | Active bids as worker cards (with hashrate history) |
+| GET | `/api/orders/history` | Bid history (fulfilled / cancelled) |
 | POST | `/api/orders` | Create a new order |
-| PUT | `/api/orders/{id}` | Update price/budget/speed |
+| PUT | `/api/orders/{id}/price` | Update bid price |
 | DELETE | `/api/orders/{id}` | Cancel order |
-| GET | `/api/market/orderbook` | Public order book |
+| GET | `/api/market/orderbook` | Public order book (bids + asks) |
 | GET | `/api/market/balance` | Your BTC balance |
+| GET | `/api/market/stats` | Market stats (best bid/ask, hashrate) |
+| GET | `/api/pool/stats` | Solo pool notable shares + hashrate |
+| GET | `/api/pool/difficulty` | Current BTC network difficulty |
 | GET | `/api/settings` | Current strategy settings |
 | PATCH | `/api/settings` | Update strategy settings live |
 | POST | `/api/strategy/evaluate` | Manual strategy cycle trigger |

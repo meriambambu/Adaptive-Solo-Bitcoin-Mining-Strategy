@@ -1,14 +1,17 @@
 """
 Adaptive bidding strategy.
 
-Adjusts price on ACTIVE bids to stay in cheapest TOP_N asks of the order book.
-Never creates or cancels orders — only price edits.
-Prices in .env / settings are BTC/EH/day; converted to satoshi when calling API.
+Keeps each active bid within the competitive zone around P_N:
 
-LOWER logic:
-- Filtered orderbook (hr_matched_ph > 0 only) determines P_N and level_gap.
-- LOWER is gated by a per-bid cooldown to respect the API rate limit.
-- Force-lower bypasses the cooldown when level_gap >= rank_drop_threshold.
+  RAISE  – bid < P_N                     → step up by PRICE_STEP toward P_N
+  HOLD   – P_N ≤ bid ≤ P_N + UPPER_BUFFER  → no action (hysteresis zone)
+  LOWER  – bid > P_N + UPPER_BUFFER       → lower to P_N − LOWER_MARGIN
+                                             (subject to LOWER_COOLDOWN rate-limit)
+
+Hard limits:
+  MIN_BID_PRICE ≤ any target ≤ MAX_BID_PRICE
+
+P_N is the Nth cheapest bid in the active (hr_matched_ph > 0) orderbook.
 """
 
 import logging
@@ -49,7 +52,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
             db.commit()
             return {"action": "IDLE", "timestamp": datetime.utcnow().isoformat()}
 
-        # 2. Order book — filter to bids with actual hashrate, then sort cheapest first
+        # 2. Order book — prefer bids with active hashrate, fall back to full book
         book = await client.get_order_book()
         active_book = [b for b in book.bids if b.hr_matched_ph > 0]
         if not active_book:
@@ -57,30 +60,29 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
             active_book = book.bids
         sorted_bids = sorted(active_book, key=lambda b: b.price_sat)
 
-        # Distinct price levels in the filtered book (for level_gap computation)
-        book_levels = sorted([b.price_sat for b in sorted_bids])
-
-        # P_N in satoshi
         n = cfg.top_n
         p_n_sat = sorted_bids[n - 1].price_sat if len(sorted_bids) >= n else (
             sorted_bids[-1].price_sat if sorted_bids else 0
         )
         p_n_btc = p_n_sat / SAT
 
-        # Strategy params in satoshi
+        # Convert config limits to satoshi
         max_sat = float(cfg.max_bid_price) * SAT
+        min_sat = float(cfg.min_bid_price) * SAT
+        upper_buffer_sat = float(cfg.upper_buffer) * SAT
+        lower_margin_sat = float(cfg.lower_margin) * SAT
+        price_step_sat = float(cfg.price_step) * SAT
 
         # 3. Evaluate each active bid
         for item in active:
             result = await _evaluate(
-                item, p_n_sat, max_sat,
-                book_levels,
-                cfg.rank_drop_threshold,
-                cfg.lower_cooldown,
+                item, p_n_sat, max_sat, min_sat,
+                upper_buffer_sat, lower_margin_sat, price_step_sat,
+                cfg.lower_cooldown, cfg.top_n,
                 client, db, cfg,
             )
             results.append(result)
-            _snapshot(db, item, p_n_sat)
+            _snapshot(db, item, p_n_sat, upper_buffer_sat)
 
         db.commit()
         return {
@@ -102,9 +104,12 @@ async def _evaluate(
     item: BidResponseItem,
     p_n_sat: float,
     max_sat: float,
-    book_levels: list[float],
-    rank_drop_threshold: int,
+    min_sat: float,
+    upper_buffer_sat: float,
+    lower_margin_sat: float,
+    price_step_sat: float,
     lower_cooldown: int,
+    top_n: int,
     client: BraiinsClient,
     db: Session,
     cfg,
@@ -114,50 +119,53 @@ async def _evaluate(
     target_sat: float | None = None
     action = "HOLD"
 
-    # How many distinct book price levels sit between P_N and my price
-    level_gap = sum(1 for lvl in book_levels if p_n_sat <= lvl < my_sat)
+    lower_threshold_sat = p_n_sat + upper_buffer_sat
+    lower_target_sat = max(min_sat, p_n_sat - lower_margin_sat)
 
-    # Rate-limit check: has enough time passed since last LOWER on this bid?
     last = _last_lowered.get(bid.id)
     rate_limit_ok = (last is None) or (datetime.utcnow() - last >= timedelta(seconds=lower_cooldown))
 
-    reason = (
-        f"Price {my_sat/SAT:.5f} BTC at P{cfg.top_n}={p_n_sat/SAT:.5f} BTC — holding"
-    )
-
+    # ── Hard cap ──────────────────────────────────────────────────────────────
     if my_sat > max_sat:
         target_sat = max_sat
         action = "LOWER"
-        reason = f"Price {my_sat/SAT:.5f} exceeds MAX {max_sat/SAT:.5f} BTC — hard cap"
+        reason = f"Price {my_sat/SAT:.5f} exceeds MAX {max_sat/SAT:.5f} — lowering to cap"
 
-    elif p_n_sat > 0 and my_sat > p_n_sat:
-        if level_gap >= rank_drop_threshold and rate_limit_ok:
-            target_sat = p_n_sat
+    # ── Above hysteresis zone → LOWER ─────────────────────────────────────────
+    elif p_n_sat > 0 and my_sat > lower_threshold_sat:
+        if rate_limit_ok:
+            target_sat = lower_target_sat
             action = "LOWER"
             reason = (
-                f"Price {my_sat/SAT:.5f} > P{cfg.top_n} ({p_n_sat/SAT:.5f}), "
-                f"gap={level_gap} levels ≥ threshold {rank_drop_threshold} — lowering to {target_sat/SAT:.5f} BTC"
-            )
-        elif not rate_limit_ok:
-            reason = (
-                f"Price {my_sat/SAT:.5f} > P{cfg.top_n} ({p_n_sat/SAT:.5f}), "
-                f"gap={level_gap} levels — rate-limited, waiting for cooldown"
+                f"Price {my_sat/SAT:.5f} > P{top_n}+buffer ({lower_threshold_sat/SAT:.5f})"
+                f" — lowering to {lower_target_sat/SAT:.5f}"
             )
         else:
             reason = (
-                f"Price {my_sat/SAT:.5f} > P{cfg.top_n} ({p_n_sat/SAT:.5f}), "
-                f"gap={level_gap} levels < threshold {rank_drop_threshold} — holding"
+                f"Price {my_sat/SAT:.5f} above zone (P{top_n}={p_n_sat/SAT:.5f}"
+                f"+{upper_buffer_sat/SAT:.5f}) — rate-limited, waiting"
             )
 
+    # ── Below P_N → RAISE ────────────────────────────────────────────────────
     elif p_n_sat > 0 and my_sat < p_n_sat:
-        target_sat = min(p_n_sat, max_sat)
+        if price_step_sat > 0:
+            target_sat = min(my_sat + price_step_sat, p_n_sat, max_sat)
+        else:
+            target_sat = min(p_n_sat, max_sat)
         action = "RAISE"
         reason = (
-            f"Price {my_sat/SAT:.5f} < P{cfg.top_n} ({p_n_sat/SAT:.5f}) "
-            f"— raising to {target_sat/SAT:.5f} BTC"
+            f"Price {my_sat/SAT:.5f} < P{top_n} ({p_n_sat/SAT:.5f})"
+            f" — raising to {target_sat/SAT:.5f}"  # type: ignore[union-attr]
         )
 
-    is_in_top_n = (my_sat <= p_n_sat) if p_n_sat > 0 else False
+    # ── Inside hysteresis zone [P_N, P_N+upper_buffer] → HOLD ────────────────
+    else:
+        reason = (
+            f"Price {my_sat/SAT:.5f} within zone"
+            f" [{p_n_sat/SAT:.5f} – {lower_threshold_sat/SAT:.5f}] — holding"
+        )
+
+    is_in_zone = p_n_sat <= my_sat <= lower_threshold_sat if p_n_sat > 0 else False
 
     if target_sat is not None and abs(target_sat - my_sat) > 1:
         try:
@@ -171,12 +179,11 @@ async def _evaluate(
                  old_price=my_sat / SAT, new_price=target_sat / SAT,
                  market_p_n=p_n_sat / SAT, reason=reason)
             logger.info("Bid %s: %s %.5f → %.5f BTC (P%d=%.5f)",
-                        bid.id, action, my_sat/SAT, target_sat/SAT, cfg.top_n, p_n_sat/SAT)
+                        bid.id, action, my_sat/SAT, target_sat/SAT, top_n, p_n_sat/SAT)
             return {"bid_id": bid.id, "action": action,
                     "old_price_btc": round(my_sat/SAT, 8),
                     "new_price_btc": round(target_sat/SAT, 8),
-                    "level_gap": level_gap,
-                    "reason": reason, "is_in_top_n": target_sat <= p_n_sat}
+                    "reason": reason, "is_in_zone": is_in_zone}
         except Exception as exc:
             logger.error("Failed to edit bid %s: %s", bid.id, exc)
             _log(db, order_id=bid.id, action="ERROR",
@@ -187,14 +194,15 @@ async def _evaluate(
     _log(db, order_id=bid.id, action="HOLD",
          old_price=my_sat/SAT, market_p_n=p_n_sat/SAT, reason=reason)
     return {"bid_id": bid.id, "action": "HOLD",
-            "price_btc": round(my_sat/SAT, 8), "level_gap": level_gap,
-            "reason": reason, "is_in_top_n": is_in_top_n}
+            "price_btc": round(my_sat/SAT, 8),
+            "reason": reason, "is_in_zone": is_in_zone}
 
 
 async def run_rank_check(client: BraiinsClient, db: Session) -> dict:
     """
-    Fast rank check — runs every rank_check_interval seconds.
-    Only raises bids that have fallen below P_N. Never lowers.
+    Fast rank check (every RANK_CHECK_INTERVAL seconds).
+    Raises bids that have fallen below P_N, stepping by PRICE_STEP if configured.
+    Never lowers.
     """
     cfg = get_settings()
 
@@ -223,6 +231,7 @@ async def run_rank_check(client: BraiinsClient, db: Session) -> dict:
             return {"action": "SKIPPED", "reason": "empty orderbook"}
 
         max_sat = float(cfg.max_bid_price) * SAT
+        price_step_sat = float(cfg.price_step) * SAT
         raises = []
 
         for item in active:
@@ -230,12 +239,15 @@ async def run_rank_check(client: BraiinsClient, db: Session) -> dict:
             my_sat = bid.price_sat
 
             if my_sat < p_n_sat:
-                target_sat = min(p_n_sat, max_sat)
+                if price_step_sat > 0:
+                    target_sat = min(my_sat + price_step_sat, p_n_sat, max_sat)
+                else:
+                    target_sat = min(p_n_sat, max_sat)
                 if abs(target_sat - my_sat) <= 1:
                     continue
                 reason = (
-                    f"[fast] Price {my_sat/SAT:.5f} < P{n} ({p_n_sat/SAT:.5f}) "
-                    f"— raising to {target_sat/SAT:.5f} BTC"
+                    f"[fast] Price {my_sat/SAT:.5f} < P{n} ({p_n_sat/SAT:.5f})"
+                    f" — stepping to {target_sat/SAT:.5f}"
                 )
                 try:
                     await client.edit_bid(EditBidRequest(
@@ -267,13 +279,14 @@ def _log(db: Session, order_id: str, action: str,
                        market_p_n=market_p_n, reason=reason))
 
 
-def _snapshot(db: Session, item: BidResponseItem, p_n_sat: float) -> None:
+def _snapshot(db: Session, item: BidResponseItem, p_n_sat: float, upper_buffer_sat: float) -> None:
     bid = item.bid
+    in_zone = (p_n_sat <= bid.price_sat <= p_n_sat + upper_buffer_sat) if p_n_sat > 0 else False
     db.add(BidSnapshot(
         order_id=bid.id,
         status=bid.status,
         price=bid.price_sat / SAT,
         accepted_speed=item.state_estimate.avg_speed_ph,
         available_amount=item.state_estimate.amount_remaining_sat / SAT,
-        is_in_top_n=bid.price_sat <= p_n_sat if p_n_sat > 0 else False,
+        is_in_top_n=in_zone,
     ))

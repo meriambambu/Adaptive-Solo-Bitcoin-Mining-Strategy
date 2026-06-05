@@ -33,6 +33,9 @@ frontend/dist/
 frontend/.vite/
 frontend/.eslintcache
 
+# Copyrighted audio — place manually in frontend/public/ (see README.md)
+frontend/public/*.mp3
+
 # IDE
 .vscode/
 .idea/

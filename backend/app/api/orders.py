@@ -1,10 +1,29 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 from app.braiins.client import BraiinsClient
 from app.braiins.models import EditBidRequest, PlaceBidRequest, SAT
+from app.db.database import get_db
+from app.db.models import BidSnapshot
 from app.dependencies import get_client
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
+
+ACTIVE_STATUSES = {"BID_STATUS_ACTIVE", "BID_STATUS_CREATED"}
+
+
+def _avg_speed(db: Session, order_id: str, now: datetime, minutes: int, fallback: float) -> float:
+    cutoff = now - timedelta(minutes=minutes)
+    rows = db.query(BidSnapshot.accepted_speed).filter(
+        BidSnapshot.order_id == order_id,
+        BidSnapshot.timestamp >= cutoff,
+    ).all()
+    if not rows:
+        return fallback
+    vals = [float(r.accepted_speed) for r in rows]
+    return sum(vals) / len(vals)
 
 
 def _format_item(item) -> dict:
@@ -47,6 +66,39 @@ async def list_order_history(
 ):
     items = await client.get_all_bids(limit=limit)
     return [_format_item(i) for i in items]
+
+
+@router.get("/workers")
+async def list_workers(
+    client: BraiinsClient = Depends(get_client),
+    db: Session = Depends(get_db),
+):
+    """
+    All active bids formatted as worker cards, including time-windowed speed
+    averages from bid_snapshot history. Shows even when current hashrate is 0.
+    """
+    items = await client.get_current_bids()
+    now = datetime.utcnow()
+    workers = []
+    for item in items:
+        bid = item.bid
+        state = item.state_estimate
+        if bid.status not in ACTIVE_STATUSES:
+            continue
+        workers.append({
+            "id": bid.id,
+            "name": bid.dest_upstream.identity if bid.dest_upstream else bid.id,
+            "status": bid.status.replace("BID_STATUS_", ""),
+            "created": bid.created,
+            "speed_now_ph": state.avg_speed_ph,
+            "speed_5m_ph": _avg_speed(db, bid.id, now, 5, state.avg_speed_ph),
+            "speed_1h_ph": _avg_speed(db, bid.id, now, 60, state.avg_speed_ph),
+            "speed_24h_ph": _avg_speed(db, bid.id, now, 1440, state.avg_speed_ph),
+            "shares_m": item.counters_estimate.shares_purchased_m,
+            "price_btc": round(bid.price_sat / SAT, 8),
+            "progress_pct": state.progress_pct,
+        })
+    return workers
 
 
 @router.post("")

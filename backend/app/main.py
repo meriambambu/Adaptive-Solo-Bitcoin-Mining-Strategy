@@ -155,10 +155,11 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
-from app.api import market, orders, settings, strategy  # noqa: E402
+from app.api import market, orders, pool, settings, strategy  # noqa: E402
 
 app.include_router(orders.router)
 app.include_router(market.router)
+app.include_router(pool.router)
 app.include_router(settings.router)
 app.include_router(strategy.router)
 

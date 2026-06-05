@@ -11,13 +11,24 @@ class Settings(BaseSettings):
     # Braiins API key — never expose this outside the backend
     braiins_api_key: str
 
+    # BTC wallet address for solo.braiins.com stats — never exposed in responses
+    solo_wallet: str = ""
+
     # Strategy parameters (all editable at runtime via /api/settings)
     top_n: int = 5
     max_bid_price: Decimal = Decimal("0.60")
+    min_bid_price: Decimal = Decimal("0.10")
+
+    # Hysteresis: only lower once bid is this many BTC above P_N (prevents flapping)
+    upper_buffer: Decimal = Decimal("0.01")
+    # When lowering, target P_N minus this many BTC (creates margin before re-raising)
+    lower_margin: Decimal = Decimal("0.005")
+    # When raising, step up by this many BTC per cycle (0 = jump directly to P_N)
+    price_step: Decimal = Decimal("0.005")
+
     poll_interval: int = 60
     rank_check_interval: int = 15
     strategy_enabled: bool = True
-    rank_drop_threshold: int = 5
     lower_cooldown: int = 300
 
     # App
@@ -42,6 +53,7 @@ class Settings(BaseSettings):
         """Return settings dict with credentials redacted — safe for logging."""
         d = self.model_dump()
         d["braiins_api_key"] = "***"
+        d["solo_wallet"] = "***"
         return d
 
 
