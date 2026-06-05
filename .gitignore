@@ -46,3 +46,7 @@ desktop.ini
 
 # APScheduler job store
 apscheduler.sqlite
+
+# Local-only project docs (never publish)
+CLAUDE.md
+docs/
