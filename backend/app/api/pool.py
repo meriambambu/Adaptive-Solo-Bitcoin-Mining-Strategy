@@ -48,6 +48,43 @@ async def get_pool_stats():
     }
 
 
+@router.get("/workers")
+async def get_pool_workers():
+    """
+    Return solo pool workers that received hashrate in the last hour.
+    Hashrate values are converted from raw H/s → PH/s to match the
+    marketplace bid worker format used by WorkerCards.
+    Username / wallet fields are never returned.
+    """
+    cfg = get_settings()
+    if not cfg.solo_wallet:
+        return []
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(f"{SOLO_BASE}/{cfg.solo_wallet}")
+        resp.raise_for_status()
+        data = resp.json()
+
+    PH = 1e15  # raw H/s → PH/s
+
+    workers = []
+    for w in (data.get("workers") or []):
+        if w.get("hashrate1hr", 0) <= 0:
+            continue
+        workers.append({
+            "name": w.get("workername", ""),
+            "source": "pool",
+            "lastshare_ts": w.get("lastshare", 0),
+            "speed_now_ph": w.get("hashrate1m", 0) / PH,
+            "speed_5m_ph": w.get("hashrate5m", 0) / PH,
+            "speed_1h_ph": w.get("hashrate1hr", 0) / PH,
+            "speed_24h_ph": w.get("hashrate1d", 0) / PH,
+            "shares_m": w.get("shares", 0) / 1e6,
+            "bestshare": w.get("bestshare", 0),
+        })
+    return workers
+
+
 @router.get("/difficulty")
 async def get_btc_difficulty():
     """Current Bitcoin network difficulty from blockchain.info."""

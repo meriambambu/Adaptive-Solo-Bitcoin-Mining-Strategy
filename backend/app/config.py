@@ -19,13 +19,6 @@ class Settings(BaseSettings):
     max_bid_price: Decimal = Decimal("0.60")
     min_bid_price: Decimal = Decimal("0.10")
 
-    # Hysteresis: only lower once bid is this many BTC above P_N (prevents flapping)
-    upper_buffer: Decimal = Decimal("0.01")
-    # When lowering, target P_N minus this many BTC (creates margin before re-raising)
-    lower_margin: Decimal = Decimal("0.005")
-    # When raising, step up by this many BTC per cycle (0 = jump directly to P_N)
-    price_step: Decimal = Decimal("0.005")
-
     poll_interval: int = 60
     rank_check_interval: int = 15
     strategy_enabled: bool = True

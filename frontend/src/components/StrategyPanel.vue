@@ -5,10 +5,10 @@ import { api } from '../api/client'
 interface Settings {
   top_n: number
   max_bid_price: string
+  min_bid_price: string
   poll_interval: number
   rank_check_interval: number
   strategy_enabled: boolean
-  rank_drop_threshold: number
   lower_cooldown: number
 }
 
@@ -26,10 +26,10 @@ interface LogEntry {
 const settings = ref<Settings>({
   top_n: 5,
   max_bid_price: '0.60',
+  min_bid_price: '0.10',
   poll_interval: 60,
   rank_check_interval: 15,
   strategy_enabled: true,
-  rank_drop_threshold: 5,
   lower_cooldown: 300,
 })
 const logs = ref<LogEntry[]>([])
@@ -145,12 +145,12 @@ onMounted(async () => {
           <input v-model.number="settings.rank_check_interval" type="number" min="10" class="input" />
         </div>
         <div>
-          <label class="block text-gray-500 mb-1">Max bid price (BTC/EH/day)</label>
+          <label class="block text-gray-500 mb-1">Max bid price (₿/EH/day)</label>
           <input v-model="settings.max_bid_price" type="number" step="0.00001" class="input" />
         </div>
         <div>
-          <label class="block text-gray-500 mb-1">Rank drop threshold (levels)</label>
-          <input v-model.number="settings.rank_drop_threshold" type="number" min="1" max="50" class="input" />
+          <label class="block text-gray-500 mb-1">Min bid price (₿/EH/day)</label>
+          <input v-model="settings.min_bid_price" type="number" step="0.00001" class="input" />
         </div>
         <div>
           <label class="block text-gray-500 mb-1">Lower cooldown (seconds)</label>

@@ -8,7 +8,7 @@ An open-source adaptive bidding bot and real-time dashboard for the [Braiins Has
 
 ## Features
 
-- **Adaptive bidding** — hysteresis-based RAISE / HOLD / LOWER using UPPER\_BUFFER, LOWER\_MARGIN, and PRICE\_STEP
+- **Adaptive bidding** — pure P_N tracking from the live order book: raises to P_N when below, lowers to P_N when above, holds when equal. No guesses, no arbitrary offsets — the market sets the price
 - **Hard price rails** — never bids above `MAX_BID_PRICE` or below `MIN_BID_PRICE`
 - **Real-time dashboard** — Vue 3 + Tailwind dark UI with live WebSocket updates
 - **Order book** — bids in green, asks in red, spread bar; your position auto-highlighted
@@ -38,10 +38,10 @@ An open-source adaptive bidding bot and real-time dashboard for the [Braiins Has
 │  /api/strategy   /ws (WebSocket)        │
 │  APScheduler → adaptive strategy loop  │
 └──────────────┬──────────────────────────┘
-               │  HMAC-SHA256 signed requests
+               │  apikey header (lowercase)
 ┌──────────────▼──────────────────────────┐
 │     Braiins Hash Power REST API         │
-│   hashpower.braiins.com/api/v2/…        │
+│   hashpower.braiins.com/webapi/…        │
 └─────────────────────────────────────────┘
           │
      SQLite DB (strategy logs + snapshots)
@@ -112,16 +112,19 @@ All settings live in `backend/.env` (never committed). Copy from `backend/.env.e
 
 | Variable | Default | Description |
 |---|---|---|
-| `TOP_N` | `5` | Stay in the cheapest N bids in the order book |
+| `TOP_N` | `5` | Target rank — P_N is the Nth cheapest matched bid; the bot tracks this price |
 | `MAX_BID_PRICE` | `0.60` | Hard ceiling — never bid above this (BTC/EH/day) |
 | `MIN_BID_PRICE` | `0.10` | Floor — never bid below this |
-| `UPPER_BUFFER` | `0.01` | Gap above P_N before lowering (prevents flapping) |
-| `LOWER_MARGIN` | `0.005` | How far below P_N to target when lowering |
-| `PRICE_STEP` | `0.005` | Increment when raising price |
-| `POLL_INTERVAL` | `60` | Seconds between cycles (minimum 30) |
+| `LOWER_COOLDOWN` | `300` | Seconds between LOWER edits per bid (Braiins API rate-limit guard) |
+| `POLL_INTERVAL` | `60` | Seconds between full cycles (minimum 30) |
+| `RANK_CHECK_INTERVAL` | `15` | Seconds between fast raise-only checks (minimum 10) |
 | `STRATEGY_ENABLED` | `true` | Master on/off switch |
 
 All parameters are also editable live from the **Strategy Settings** panel in the dashboard without restarting.
+
+> The strategy is **data-driven, not speculative.** There are no tunable "buffer" or "step"
+> offsets — the order book's P_N *is* the target price. Your only levers are which rank to
+> target (`TOP_N`) and the hard safety rails (`MIN`/`MAX_BID_PRICE`).
 
 ### Pool Setup
 
@@ -169,21 +172,29 @@ Every POLL_INTERVAL seconds:
 1. Fetch your active orders from Braiins API
    └─ If none → log IDLE, skip (no auto-create)
 
-2. Fetch public order book, sort by price ASC
+2. Fetch public order book; keep bids with real hashrate (hr_matched_ph > 0),
+   sort by price ASC  (falls back to the full book if none are matched)
 
-3. Find P_N = price of the Nth cheapest bid
+3. P_N = price of the Nth cheapest matched bid
 
 4. For each active order:
    ┌─ my_price > MAX_BID_PRICE?
    │  └─ LOWER to MAX_BID_PRICE (hard cap)
-   ├─ my_price > P_N + UPPER_BUFFER?
-   │  └─ LOWER to max(P_N − LOWER_MARGIN, MIN_BID_PRICE)
    ├─ my_price < P_N?
-   │  └─ RAISE to min(P_N + PRICE_STEP, MAX_BID_PRICE)
-   └─ otherwise → HOLD (already competitive)
+   │  └─ RAISE to min(P_N, MAX_BID_PRICE)
+   ├─ my_price > P_N?
+   │  └─ LOWER to max(P_N, MIN_BID_PRICE)   (skipped if within LOWER_COOLDOWN)
+   └─ my_price == P_N → HOLD
 
 5. Log decision → SQLite
 6. Broadcast to all dashboard WebSocket clients
+```
+
+A separate fast check runs every `RANK_CHECK_INTERVAL` seconds and only *raises* bids that
+have fallen below P_N — so you climb back into rank quickly without waiting for the full cycle.
+
+```text
+The price target is always exactly P_N — never a guessed offset above or below it.
 ```
 
 ### What the bot does NOT do
@@ -239,8 +250,9 @@ Every POLL_INTERVAL seconds:
 ### Protecting Your API Keys
 
 - **Never commit `.env`** — it is listed in `.gitignore` by default
-- The backend never logs your `BRAIINS_API_KEY_ID`, `BRAIINS_API_SECRET`, or `BRAIINS_ORG_ID`
+- The backend never logs your `BRAIINS_API_KEY` or `SOLO_WALLET` — `Settings.safe_dict()` redacts both
 - API credentials are only used server-side; the frontend never receives them
+- `SOLO_WALLET` is used only to query `solo.braiins.com` and is never returned by any API endpoint
 - Use `.env.example` as a template — it contains only placeholder values
 
 ### Open Source Contributor Notes
@@ -263,7 +275,10 @@ If you fork or contribute to this project:
 → Confirm `STRATEGY_ENABLED=true` in `.env` and check the Strategy Log panel for `IDLE` entries (means no active orders).
 
 **Order updates fail with 401/403**
-→ Open `hashpower.braiins.com/api/` in a browser, click Authorize, paste your key, execute a request, and check the Network tab. If the header is `X-Api-Key` instead of `Authorization: Bearer`, update `_auth_headers()` in [backend/app/braiins/client.py](backend/app/braiins/client.py).
+→ The API uses a lowercase `apikey: <key>` header. Confirm `BRAIINS_API_KEY` in `.env` matches the `braiins-api-token` from your browser session. The header is set in `_headers()` in [backend/app/braiins/client.py](backend/app/braiins/client.py).
+
+**Order Book shows all hashrate as `0`**
+→ The live API returns camelCase fields (`hashRateMatched`, `speedLimit`, `hashRateAvailable`). These are mapped via Pydantic `Field(alias=...)` in [backend/app/braiins/models.py](backend/app/braiins/models.py) — a missing alias silently yields `0`.
 
 **WebSocket shows "Connecting…"**
 → Ensure the backend is running on port 8000. The Vite dev proxy handles `/ws` automatically in development.

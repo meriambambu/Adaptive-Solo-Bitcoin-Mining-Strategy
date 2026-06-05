@@ -45,16 +45,18 @@ class SpotBid(BaseModel):
 
 class BidItem(BaseModel):
     """One price level in the order book."""
+    model_config = ConfigDict(populate_by_name=True)
     price_sat: float
     amount_sat: float = 0
-    hr_matched_ph: float = 0
-    speed_limit_ph: float = 0
+    hr_matched_ph: float = Field(0, alias='hashRateMatched')
+    speed_limit_ph: float = Field(0, alias='speedLimit')
 
 
 class AskItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     price_sat: float
-    hr_matched_ph: float = 0
-    hr_available_ph: float = 0
+    hr_matched_ph: float = Field(0, alias='hashRateMatched')
+    hr_available_ph: float = Field(0, alias='hashRateAvailable')
 
 
 class OrderBook(BaseModel):
