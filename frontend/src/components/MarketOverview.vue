@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { api } from '../api/client'
-import { api as settingsApi } from '../api/client'
 
 interface BookEntry {
   price_btc: number
@@ -10,25 +9,33 @@ interface BookEntry {
   speed_limit_ph: number
 }
 
-const props = defineProps<{ myOrderIds?: string[] }>()
+const props = defineProps<{ myBidPriceSat?: number[] }>()
 
 const entries = ref<BookEntry[]>([])
 const topN = ref(5)
 const loading = ref(true)
+const bookContainer = ref<HTMLElement | null>(null)
+const myBidRow = ref<HTMLElement | null>(null)
+
+function isMyBid(entry: BookEntry): boolean {
+  return (props.myBidPriceSat ?? []).includes(Math.round(entry.price_sat))
+}
 
 async function fetchBook() {
   try {
     const [bookRes, settingsRes] = await Promise.all([
       api.get<{ bids: BookEntry[] }>('/api/market/orderbook'),
-      settingsApi.get<{ top_n: number }>('/api/settings'),
+      api.get<{ top_n: number }>('/api/settings'),
     ])
-    entries.value = (bookRes.data.bids || [])
+    entries.value = bookRes.data.bids || []
     topN.value = settingsRes.data.top_n
   } catch {
     // silent
   } finally {
     loading.value = false
   }
+  await nextTick()
+  myBidRow.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
 }
 
 const pN = computed(() => {
@@ -58,23 +65,34 @@ setInterval(fetchBook, 30_000)
         <span class="table-header text-right">Price (₿/EH/day)</span>
         <span class="table-header text-right">Speed (EH/s)</span>
       </div>
-      <div
-        v-for="(entry, i) in entries.slice(0, 20)"
-        :key="i"
-        class="grid grid-cols-3 gap-1 px-2 py-1 rounded text-xs transition-colors"
-        :class="{
-          'bg-green-900/20 border border-green-800/30': i < topN,
-          'bg-surface-700/30': i >= topN,
-        }"
-      >
-        <span class="text-gray-500 font-mono">
-          <span v-if="i < topN" class="text-green-500">#{{ i + 1 }}</span>
-          <span v-else class="text-gray-600">#{{ i + 1 }}</span>
-        </span>
-        <span class="text-right font-mono" :class="i < topN ? 'text-green-300' : 'text-gray-400'">
-          {{ entry.price_btc.toFixed(5) }}
-        </span>
-        <span class="text-right font-mono text-gray-500">{{ entry.hr_matched_ph.toFixed(2) }} PH/s</span>
+      <div ref="bookContainer" class="max-h-80 overflow-y-auto">
+        <div
+          v-for="(entry, i) in entries"
+          :key="i"
+          :ref="(el) => { if (isMyBid(entry) && el) myBidRow = el as HTMLElement }"
+          class="grid grid-cols-3 gap-1 px-2 py-1 rounded text-xs transition-colors"
+          :class="{
+            'ring-1 ring-brand-purple bg-brand-purple/10': isMyBid(entry),
+            'bg-green-900/20 border border-green-800/30': !isMyBid(entry) && i < topN && entry.hr_matched_ph > 0,
+            'bg-surface-700/30': !isMyBid(entry) && (i >= topN || entry.hr_matched_ph === 0),
+            'opacity-40': entry.hr_matched_ph === 0 && !isMyBid(entry),
+          }"
+        >
+          <span class="font-mono flex items-center gap-1">
+            <span :class="i < topN && entry.hr_matched_ph > 0 ? 'text-green-500' : 'text-gray-600'">#{{ i + 1 }}</span>
+            <span v-if="isMyBid(entry)" class="text-brand-purple-light text-[9px] font-bold">YOU</span>
+            <span v-else-if="entry.hr_matched_ph === 0" class="text-gray-600 text-[9px]">no HR</span>
+          </span>
+          <span
+            class="text-right font-mono"
+            :class="isMyBid(entry) ? 'text-brand-purple-light' : i < topN && entry.hr_matched_ph > 0 ? 'text-green-300' : 'text-gray-400'"
+          >
+            {{ entry.price_btc.toFixed(5) }}
+          </span>
+          <span class="text-right font-mono text-gray-500">
+            {{ entry.hr_matched_ph > 0 ? entry.hr_matched_ph.toFixed(2) + ' PH/s' : '—' }}
+          </span>
+        </div>
       </div>
     </div>
   </div>

@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 SAT = 100_000_000  # satoshis per BTC
@@ -15,6 +15,8 @@ class UpstreamSpec(BaseModel):
 # ── Bid (order) ───────────────────────────────────────────────────────────────
 
 class BidCounters(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
     shares_purchased_m: float = 0
     shares_accepted_m: float = 0
     shares_rejected_m: float = 0

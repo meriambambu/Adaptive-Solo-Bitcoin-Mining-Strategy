@@ -13,7 +13,7 @@ from app.braiins.client import BraiinsClient
 from app.config import get_settings
 from app.db.database import get_db, init_db
 from app.dependencies import set_client
-from app.strategy.adaptive import run_strategy_cycle
+from app.strategy.adaptive import run_rank_check, run_strategy_cycle
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -57,22 +57,42 @@ manager = ConnectionManager()
 
 scheduler = AsyncIOScheduler()
 _braiins_client: BraiinsClient | None = None
+_strategy_lock = asyncio.Lock()
 
 
 async def _strategy_job() -> None:
-    cfg = get_settings()
-    db_gen = get_db()
-    db = next(db_gen)
-    try:
-        result = await run_strategy_cycle(_braiins_client, db)  # type: ignore[arg-type]
-        await manager.broadcast({"type": "strategy_update", "data": result})
-    except Exception as exc:
-        logger.error("Scheduler strategy error: %s", exc)
-    finally:
+    async with _strategy_lock:
+        db_gen = get_db()
+        db = next(db_gen)
         try:
-            db_gen.close()
-        except StopIteration:
-            pass
+            result = await run_strategy_cycle(_braiins_client, db)  # type: ignore[arg-type]
+            await manager.broadcast({"type": "strategy_update", "data": result})
+        except Exception as exc:
+            logger.error("Scheduler strategy error: %s", exc)
+        finally:
+            try:
+                db_gen.close()
+            except StopIteration:
+                pass
+
+
+async def _rank_check_job() -> None:
+    if _strategy_lock.locked():
+        return  # full strategy cycle is running — skip this tick
+    async with _strategy_lock:
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            result = await run_rank_check(_braiins_client, db)  # type: ignore[arg-type]
+            if result.get("action") == "RAISE":
+                await manager.broadcast({"type": "strategy_update", "data": result})
+        except Exception as exc:
+            logger.error("Rank check error: %s", exc)
+        finally:
+            try:
+                db_gen.close()
+            except StopIteration:
+                pass
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -95,8 +115,18 @@ async def lifespan(app: FastAPI):
         id="adaptive_strategy",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _rank_check_job,
+        trigger="interval",
+        seconds=cfg.rank_check_interval,
+        id="rank_check",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("Strategy scheduler started — interval: %ds", cfg.poll_interval)
+    logger.info(
+        "Strategy scheduler started — poll: %ds, rank check: %ds",
+        cfg.poll_interval, cfg.rank_check_interval,
+    )
 
     yield
 

@@ -29,6 +29,8 @@ def _format_item(item) -> dict:
         "pool_url": bid.dest_upstream.url if bid.dest_upstream else None,
         "pool_identity": bid.dest_upstream.identity if bid.dest_upstream else None,
         "amount_consumed_btc": round(counters.amount_consumed_sat / SAT, 8),
+        "shares_purchased_m": counters.shares_purchased_m,
+        "counters_raw": counters.model_dump(),
     }
 
 

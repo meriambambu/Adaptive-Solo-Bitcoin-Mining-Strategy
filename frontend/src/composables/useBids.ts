@@ -18,6 +18,7 @@ export interface Order {
   fee_rate_pct: number
   pool_url: string | null
   pool_identity: string | null
+  shares_purchased_m: number
 }
 
 export function useBids() {

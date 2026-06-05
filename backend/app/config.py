@@ -14,12 +14,11 @@ class Settings(BaseSettings):
     # Strategy parameters (all editable at runtime via /api/settings)
     top_n: int = 5
     max_bid_price: Decimal = Decimal("0.60")
-    min_bid_price: Decimal = Decimal("0.10")
-    upper_buffer: Decimal = Decimal("0.01")
-    lower_margin: Decimal = Decimal("0.005")
-    price_step: Decimal = Decimal("0.005")
     poll_interval: int = 60
+    rank_check_interval: int = 15
     strategy_enabled: bool = True
+    rank_drop_threshold: int = 5
+    lower_cooldown: int = 300
 
     # App
     port: int = 8000

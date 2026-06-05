@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import StatsBar from './components/StatsBar.vue'
 import BidsTable from './components/BidsTable.vue'
+import BidHistory from './components/BidHistory.vue'
 import CreateBidModal from './components/CreateBidModal.vue'
 import MarketOverview from './components/MarketOverview.vue'
 import StrategyPanel from './components/StrategyPanel.vue'
@@ -68,11 +69,12 @@ function handleEdit(order: Order) {
           @edit="handleEdit"
           @create="showCreate = true"
         />
+        <BidHistory />
       </div>
 
       <!-- Right: market + strategy -->
       <div class="space-y-6">
-        <MarketOverview :my-order-ids="orders.map(o => o.id)" />
+        <MarketOverview :my-bid-price-sat="orders.map(o => Math.round(o.price_sat))" />
         <StrategyPanel />
       </div>
     </main>

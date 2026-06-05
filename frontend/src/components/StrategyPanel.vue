@@ -5,12 +5,11 @@ import { api } from '../api/client'
 interface Settings {
   top_n: number
   max_bid_price: string
-  min_bid_price: string
-  upper_buffer: string
-  lower_margin: string
-  price_step: string
   poll_interval: number
+  rank_check_interval: number
   strategy_enabled: boolean
+  rank_drop_threshold: number
+  lower_cooldown: number
 }
 
 interface LogEntry {
@@ -27,12 +26,11 @@ interface LogEntry {
 const settings = ref<Settings>({
   top_n: 5,
   max_bid_price: '0.60',
-  min_bid_price: '0.10',
-  upper_buffer: '0.01',
-  lower_margin: '0.005',
-  price_step: '0.005',
   poll_interval: 60,
+  rank_check_interval: 15,
   strategy_enabled: true,
+  rank_drop_threshold: 5,
+  lower_cooldown: 300,
 })
 const logs = ref<LogEntry[]>([])
 const saving = ref(false)
@@ -143,24 +141,20 @@ onMounted(async () => {
           <input v-model.number="settings.poll_interval" type="number" min="30" class="input" />
         </div>
         <div>
+          <label class="block text-gray-500 mb-1">Rank check interval (seconds)</label>
+          <input v-model.number="settings.rank_check_interval" type="number" min="10" class="input" />
+        </div>
+        <div>
           <label class="block text-gray-500 mb-1">Max bid price (BTC/EH/day)</label>
           <input v-model="settings.max_bid_price" type="number" step="0.00001" class="input" />
         </div>
         <div>
-          <label class="block text-gray-500 mb-1">Min bid price (BTC/EH/day)</label>
-          <input v-model="settings.min_bid_price" type="number" step="0.00001" class="input" />
+          <label class="block text-gray-500 mb-1">Rank drop threshold (levels)</label>
+          <input v-model.number="settings.rank_drop_threshold" type="number" min="1" max="50" class="input" />
         </div>
         <div>
-          <label class="block text-gray-500 mb-1">Upper buffer (BTC)</label>
-          <input v-model="settings.upper_buffer" type="number" step="0.001" class="input" />
-        </div>
-        <div>
-          <label class="block text-gray-500 mb-1">Lower margin (BTC)</label>
-          <input v-model="settings.lower_margin" type="number" step="0.001" class="input" />
-        </div>
-        <div>
-          <label class="block text-gray-500 mb-1">Price step (BTC)</label>
-          <input v-model="settings.price_step" type="number" step="0.001" class="input" />
+          <label class="block text-gray-500 mb-1">Lower cooldown (seconds)</label>
+          <input v-model.number="settings.lower_cooldown" type="number" min="30" class="input" />
         </div>
       </div>
 

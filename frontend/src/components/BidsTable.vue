@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+
+function formatBest(sharesM: number): string {
+  if (!sharesM || sharesM <= 0) return ''
+  if (sharesM >= 1_000_000) return `${(sharesM / 1_000_000).toFixed(1)}T`
+  if (sharesM >= 1_000) return `${(sharesM / 1_000).toFixed(1)}G`
+  return `${Math.round(sharesM)}M`
+}
 import type { Order } from '../composables/useBids'
 
 const props = defineProps<{
@@ -77,10 +84,13 @@ const confirmCancel = ref<string | null>(null)
                 <span class="font-mono text-xs text-brand-purple-light hover:underline cursor-pointer">
                   {{ order.id }}
                 </span>
-                <div class="flex gap-1 mt-0.5">
+                <div class="flex gap-1 mt-0.5 flex-wrap">
                   <span class="badge-solo">SOLO</span>
                   <span class="badge text-xs" :class="isActive(order.status) ? 'text-green-400' : 'text-gray-500'">
                     {{ statusLabel(order.status) }}
+                  </span>
+                  <span v-if="order.shares_purchased_m > 0" class="badge text-xs text-gray-400">
+                    Shares: {{ formatBest(order.shares_purchased_m) }}
                   </span>
                 </div>
               </div>
