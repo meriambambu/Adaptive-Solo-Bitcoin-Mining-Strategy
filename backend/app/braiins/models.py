@@ -1,67 +1,104 @@
-from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-class PoolConfig(BaseModel):
-    host: str
-    port: int
-    username: str
-    password: Optional[str] = None
+SAT = 100_000_000  # satoshis per BTC
 
 
-class OrderMeta(BaseModel):
-    isSolo: Optional[bool] = False
-    notes: Optional[str] = None
+# ── Shared ────────────────────────────────────────────────────────────────────
+
+class UpstreamSpec(BaseModel):
+    url: str
+    identity: str
 
 
-class Order(BaseModel):
+# ── Bid (order) ───────────────────────────────────────────────────────────────
+
+class BidCounters(BaseModel):
+    shares_purchased_m: float = 0
+    shares_accepted_m: float = 0
+    shares_rejected_m: float = 0
+    fee_paid_sat: float = 0
+    amount_consumed_sat: float = 0
+
+
+class BidState(BaseModel):
+    avg_speed_ph: float = 0        # PH/s
+    progress_pct: float = 0        # 0..100
+    amount_remaining_sat: float = 0
+
+
+class SpotBid(BaseModel):
     id: str
-    price: Decimal
-    limit: Decimal = Decimal("0")
-    amount: Decimal
-    availableAmount: Decimal = Decimal("0")
-    payedAmount: Decimal = Decimal("0")
-    type: str = "STANDARD"
-    status: str  # ACTIVE | PENDING | EXPIRED | CANCELLED | DEAD
-    acceptedSpeed: Decimal = Decimal("0")
-    estimatedDurationInSeconds: Optional[int] = None
-    endTs: Optional[int] = None
-    alive: bool = True
-    pool: Optional[PoolConfig] = None
-    meta: Optional[OrderMeta] = None
-    createdTs: Optional[int] = None
+    price_sat: float               # satoshi / EH / day
+    status: str                    # BID_STATUS_ACTIVE | BID_STATUS_CANCELED | …
+    is_current: bool = False
+    amount_sat: float = 0          # total budget in satoshi
+    speed_limit_ph: float = 0      # PH/s, 0 = unlimited
+    dest_upstream: Optional[UpstreamSpec] = None
+    memo: str = ""
+    created: Optional[str] = None
+    fee_rate_pct: float = 0
 
 
-class OrderBookEntry(BaseModel):
-    price: Decimal
-    speed: Decimal
-    type: str = "STANDARD"
+class BidItem(BaseModel):
+    """One price level in the order book."""
+    price_sat: float
+    amount_sat: float = 0
+    hr_matched_ph: float = 0
+    speed_limit_ph: float = 0
+
+
+class AskItem(BaseModel):
+    price_sat: float
+    hr_matched_ph: float = 0
+    hr_available_ph: float = 0
 
 
 class OrderBook(BaseModel):
-    list: list[OrderBookEntry] = []
+    bids: list[BidItem] = []
+    asks: list[AskItem] = []
 
+
+class BidResponseItem(BaseModel):
+    bid: SpotBid
+    counters_estimate: BidCounters = BidCounters()
+    counters_committed: BidCounters = BidCounters()
+    state_estimate: BidState = BidState()
+
+
+class BidsResponse(BaseModel):
+    items: list[BidResponseItem] = []
+
+
+# ── Account ───────────────────────────────────────────────────────────────────
 
 class AccountBalance(BaseModel):
-    totalBalance: Decimal = Decimal("0")
-    available: Decimal = Decimal("0")
-    pending: Decimal = Decimal("0")
+    subaccount: str = ""
     currency: str = "BTC"
+    total_balance_sat: int = 0
+    available_balance_sat: int = 0
+    blocked_balance_sat: int = 0
 
 
-class CreateOrderRequest(BaseModel):
-    price: Decimal
-    limit: Decimal = Decimal("0")
-    amount: Decimal
-    poolHost: str
-    poolPort: int
-    poolUser: str
-    poolPass: str = "x"
-    notes: Optional[str] = None
+class BalancesResponse(BaseModel):
+    accounts: list[AccountBalance] = []
 
 
-class UpdateOrderRequest(BaseModel):
-    price: Optional[Decimal] = None
-    limit: Optional[Decimal] = None
-    amount: Optional[Decimal] = None
+# ── Requests ──────────────────────────────────────────────────────────────────
+
+class PlaceBidRequest(BaseModel):
+    """Frontend sends prices in BTC; client converts to satoshi before calling API."""
+    price_btc: float               # BTC / EH / day
+    amount_btc: float              # budget in BTC
+    speed_limit_ph: float = 0      # PH/s, 0 = unlimited
+    pool_url: str
+    pool_identity: str             # username / worker
+    memo: str = ""
+
+
+class EditBidRequest(BaseModel):
+    bid_id: str
+    new_price_btc: Optional[float] = None
+    new_amount_btc: Optional[float] = None   # must be >= current amount
+    new_speed_limit_ph: Optional[float] = None

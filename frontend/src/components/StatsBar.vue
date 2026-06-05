@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { api } from '../api/client'
 
-const balance = ref({ totalBalance: '—', available: '—', pending: '—' })
+const balance = ref({ total_btc: 0, available_btc: 0, blocked_btc: 0 })
 const loading = ref(true)
 
 async function fetchBalance() {
@@ -25,19 +25,19 @@ setInterval(fetchBalance, 60_000)
     <div class="flex flex-col">
       <span class="text-xs text-gray-500 uppercase tracking-wider">Available Balance</span>
       <span class="text-sm font-mono text-green-400">
-        {{ loading ? '...' : `₿ ${Number(balance.available).toFixed(8)}` }}
+        {{ loading ? '...' : `₿ ${balance.available_btc.toFixed(8)}` }}
       </span>
     </div>
     <div class="flex flex-col">
       <span class="text-xs text-gray-500 uppercase tracking-wider">Total Balance</span>
       <span class="text-sm font-mono text-gray-300">
-        {{ loading ? '...' : `₿ ${Number(balance.totalBalance).toFixed(8)}` }}
+        {{ loading ? '...' : `₿ ${balance.total_btc.toFixed(8)}` }}
       </span>
     </div>
     <div class="flex flex-col">
-      <span class="text-xs text-gray-500 uppercase tracking-wider">Pending</span>
+      <span class="text-xs text-gray-500 uppercase tracking-wider">In Orders</span>
       <span class="text-sm font-mono text-yellow-400">
-        {{ loading ? '...' : `₿ ${Number(balance.pending).toFixed(8)}` }}
+        {{ loading ? '...' : `₿ ${balance.blocked_btc.toFixed(8)}` }}
       </span>
     </div>
   </div>

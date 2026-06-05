@@ -3,17 +3,21 @@ import { api } from '../api/client'
 
 export interface Order {
   id: string
-  price: string
-  limit: string
-  amount: string
-  availableAmount: string
-  payedAmount: string
+  price_btc: number
+  price_sat: number
+  amount_btc: number
+  amount_remaining_btc: number
+  amount_consumed_btc: number
+  speed_limit_ph: number
+  avg_speed_ph: number
+  progress_pct: number
   status: string
-  acceptedSpeed: string
-  estimatedDurationInSeconds: number | null
-  createdTs: number | null
-  pool: { host: string; port: number; username: string } | null
-  meta: { isSolo: boolean; notes: string | null } | null
+  is_current: boolean
+  created: string | null
+  memo: string
+  fee_rate_pct: number
+  pool_url: string | null
+  pool_identity: string | null
 }
 
 export function useBids() {
@@ -39,11 +43,10 @@ export function useBids() {
     orders.value = orders.value.filter((o) => o.id !== id)
   }
 
-  async function updateOrder(id: string, payload: { price?: string; limit?: string; amount?: string }) {
-    const { data } = await api.put<Order>(`/api/orders/${id}`, payload)
-    const idx = orders.value.findIndex((o) => o.id === id)
-    if (idx !== -1) orders.value[idx] = data
+  async function updatePrice(id: string, newPriceBtc: number) {
+    await api.put(`/api/orders/${id}/price`, null, { params: { new_price_btc: newPriceBtc } })
+    await fetchOrders()
   }
 
-  return { orders, loading, error, fetchOrders, cancelOrder, updateOrder }
+  return { orders, loading, error, fetchOrders, cancelOrder, updatePrice }
 }

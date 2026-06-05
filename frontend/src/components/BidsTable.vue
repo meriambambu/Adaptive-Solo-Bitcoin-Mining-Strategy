@@ -13,25 +13,19 @@ const emit = defineEmits<{
   (e: 'create'): void
 }>()
 
-function formatDate(ts: number | null): string {
-  if (!ts) return '—'
-  return new Date(ts).toLocaleString('en-GB', {
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-GB', {
     month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit',
   }).toUpperCase()
 }
 
-function formatEta(seconds: number | null): string {
-  if (!seconds || seconds <= 0) return 'N/A'
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
+function isActive(status: string): boolean {
+  return status === 'BID_STATUS_ACTIVE' || status === 'BID_STATUS_CREATED'
 }
 
-function progress(order: Order): number {
-  const paid = Number(order.payedAmount)
-  const total = Number(order.amount)
-  if (!total) return 0
-  return Math.min(100, Math.round((paid / total) * 100))
+function statusLabel(status: string): string {
+  return status.replace('BID_STATUS_', '')
 }
 
 const confirmCancel = ref<string | null>(null)
@@ -61,7 +55,7 @@ const confirmCancel = ref<string | null>(null)
           <th class="table-header text-right pb-2">Budget<br><span class="normal-case font-normal text-gray-600">(BTC)</span></th>
           <th class="table-header text-right pb-2">Limit/Speed<br><span class="normal-case font-normal text-gray-600">(EH/s)</span></th>
           <th class="table-header text-right pb-2">Created</th>
-          <th class="table-header text-right pb-2">ETA</th>
+          <th class="table-header text-right pb-2">Remaining</th>
           <th class="table-header text-right pb-2">Progress</th>
           <th class="table-header text-right pb-2">Actions</th>
         </tr>
@@ -77,14 +71,17 @@ const confirmCancel = ref<string | null>(null)
             <div class="flex items-center gap-2">
               <span
                 class="h-2 w-2 rounded-full flex-shrink-0"
-                :class="order.status === 'ACTIVE' ? 'bg-green-500' : 'bg-gray-600'"
+                :class="isActive(order.status) ? 'bg-green-500' : 'bg-gray-600'"
               />
               <div>
                 <span class="font-mono text-xs text-brand-purple-light hover:underline cursor-pointer">
-                  {{ order.id.slice(0, 16) }}…
+                  {{ order.id }}
                 </span>
                 <div class="flex gap-1 mt-0.5">
-                  <span v-if="order.meta?.isSolo" class="badge-solo">SOLO</span>
+                  <span class="badge-solo">SOLO</span>
+                  <span class="badge text-xs" :class="isActive(order.status) ? 'text-green-400' : 'text-gray-500'">
+                    {{ statusLabel(order.status) }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -92,28 +89,29 @@ const confirmCancel = ref<string | null>(null)
 
           <!-- PRICE -->
           <td class="py-3 text-right font-mono text-gray-200">
-            ₿{{ Number(order.price).toFixed(5) }}
+            ₿{{ order.price_btc.toFixed(5) }}
           </td>
 
           <!-- BUDGET -->
           <td class="py-3 text-right font-mono text-gray-200">
-            ₿{{ Number(order.amount).toFixed(8) }}
+            ₿{{ order.amount_btc.toFixed(8) }}
           </td>
 
-          <!-- LIMIT / SPEED -->
+          <!-- LIMIT / SPEED (PH/s) -->
           <td class="py-3 text-right font-mono text-gray-400">
-            {{ Number(order.limit).toFixed(4) }} /
-            <span class="text-gray-200">{{ Number(order.acceptedSpeed).toFixed(4) }}</span>
+            {{ order.speed_limit_ph > 0 ? order.speed_limit_ph.toFixed(2) : '∞' }} /
+            <span class="text-gray-200">{{ order.avg_speed_ph.toFixed(2) }}</span>
+            <span class="text-gray-600 text-xs ml-1">PH/s</span>
           </td>
 
           <!-- CREATED -->
           <td class="py-3 text-right text-gray-400 text-xs">
-            {{ formatDate(order.createdTs) }}
+            {{ formatDate(order.created) }}
           </td>
 
-          <!-- ETA -->
-          <td class="py-3 text-right text-gray-400 text-xs">
-            {{ formatEta(order.estimatedDurationInSeconds) }}
+          <!-- REMAINING -->
+          <td class="py-3 text-right text-gray-400 text-xs font-mono">
+            ₿{{ order.amount_remaining_btc.toFixed(8) }}
           </td>
 
           <!-- PROGRESS -->
@@ -126,12 +124,12 @@ const confirmCancel = ref<string | null>(null)
                     cx="14" cy="14" r="11" fill="none"
                     stroke="#7c3aed" stroke-width="3"
                     stroke-dasharray="69.1"
-                    :stroke-dashoffset="69.1 * (1 - progress(order) / 100)"
+                    :stroke-dashoffset="69.1 * (1 - order.progress_pct / 100)"
                     stroke-linecap="round"
                   />
                 </svg>
                 <span class="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-gray-300">
-                  {{ progress(order) }}%
+                  {{ Math.round(order.progress_pct) }}%
                 </span>
               </div>
             </div>

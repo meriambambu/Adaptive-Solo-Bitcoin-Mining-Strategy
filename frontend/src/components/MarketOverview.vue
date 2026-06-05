@@ -4,9 +4,10 @@ import { api } from '../api/client'
 import { api as settingsApi } from '../api/client'
 
 interface BookEntry {
-  price: string
-  speed: string
-  type: string
+  price_btc: number
+  price_sat: number
+  hr_matched_ph: number
+  speed_limit_ph: number
 }
 
 const props = defineProps<{ myOrderIds?: string[] }>()
@@ -18,10 +19,10 @@ const loading = ref(true)
 async function fetchBook() {
   try {
     const [bookRes, settingsRes] = await Promise.all([
-      api.get<{ list: BookEntry[] }>('/api/market/orderbook?size=30'),
+      api.get<{ bids: BookEntry[] }>('/api/market/orderbook'),
       settingsApi.get<{ top_n: number }>('/api/settings'),
     ])
-    entries.value = (bookRes.data.list || []).sort((a, b) => Number(a.price) - Number(b.price))
+    entries.value = (bookRes.data.bids || [])
     topN.value = settingsRes.data.top_n
   } catch {
     // silent
@@ -31,8 +32,8 @@ async function fetchBook() {
 }
 
 const pN = computed(() => {
-  if (entries.value.length >= topN.value) return entries.value[topN.value - 1].price
-  return entries.value.at(-1)?.price ?? '—'
+  if (entries.value.length >= topN.value) return entries.value[topN.value - 1].price_btc
+  return entries.value.at(-1)?.price_btc ?? null
 })
 
 onMounted(fetchBook)
@@ -45,7 +46,7 @@ setInterval(fetchBook, 30_000)
       <h2 class="text-sm font-semibold text-gray-200">Order Book</h2>
       <div class="text-xs text-gray-500">
         P<sub>{{ topN }}</sub> =
-        <span class="text-green-400 font-mono">₿{{ pN !== '—' ? Number(pN).toFixed(5) : '—' }}</span>
+        <span class="text-green-400 font-mono">{{ pN !== null ? `₿${pN.toFixed(5)}` : '—' }}</span>
       </div>
     </div>
 
@@ -71,9 +72,9 @@ setInterval(fetchBook, 30_000)
           <span v-else class="text-gray-600">#{{ i + 1 }}</span>
         </span>
         <span class="text-right font-mono" :class="i < topN ? 'text-green-300' : 'text-gray-400'">
-          {{ Number(entry.price).toFixed(5) }}
+          {{ entry.price_btc.toFixed(5) }}
         </span>
-        <span class="text-right font-mono text-gray-500">{{ Number(entry.speed).toFixed(4) }}</span>
+        <span class="text-right font-mono text-gray-500">{{ entry.hr_matched_ph.toFixed(2) }} PH/s</span>
       </div>
     </div>
   </div>
