@@ -24,9 +24,11 @@ logger = logging.getLogger(__name__)
 ACTIVE_STATUSES = {"BID_STATUS_ACTIVE", "BID_STATUS_CREATED"}
 
 _last_lowered: dict[str, datetime] = {}
+_market_settings: dict = {}  # cached on first cycle to avoid repeated API calls
 
 
 async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
+    global _market_settings
     cfg = get_settings()
 
     if not cfg.strategy_enabled:
@@ -36,6 +38,18 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
     results: list[dict] = []
 
     try:
+        # Fetch Braiins market settings once and cache — used to enforce server-side lower rate limit
+        if not _market_settings:
+            try:
+                _market_settings = await client.get_market_settings()
+                logger.info("Market settings fetched: %s", _market_settings)
+            except Exception as exc:
+                logger.warning("Could not fetch market settings: %s — using defaults", exc)
+                _market_settings = {}
+
+        braiins_lower_limit = int(_market_settings.get("lower_rate_limit_seconds", 1800))
+        effective_cooldown = max(cfg.lower_cooldown, braiins_lower_limit)
+
         all_items = await client.get_current_bids()
         active = [item for item in all_items if item.bid.status in ACTIVE_STATUSES]
 
@@ -64,7 +78,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
         for item in active:
             result = await _evaluate(
                 item, p_n_sat, max_sat, min_sat,
-                cfg.lower_cooldown, cfg.top_n,
+                effective_cooldown, cfg.top_n,
                 client, db,
             )
             results.append(result)

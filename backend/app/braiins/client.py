@@ -158,9 +158,14 @@ class BraiinsClient:
             payload["new_speed_limit_ph"] = {"value": req.new_speed_limit_ph}
         resp = await self._http.put("/spot/bid", json=payload, headers=_headers())
         if not resp.is_success:
+            body = resp.text[:300]
             logger.error("edit_bid failed — bid_id=%r status=%d body=%r",
-                         req.bid_id, resp.status_code, resp.text[:500])
-        resp.raise_for_status()
+                         req.bid_id, resp.status_code, body)
+            raise httpx.HTTPStatusError(
+                f"HTTP {resp.status_code}: {body}",
+                request=resp.request,
+                response=resp,
+            )
 
     async def cancel_bid(self, order_id: str) -> dict:
         resp = await self._http.delete("/spot/bid", params={"order_id": order_id}, headers=_headers())
