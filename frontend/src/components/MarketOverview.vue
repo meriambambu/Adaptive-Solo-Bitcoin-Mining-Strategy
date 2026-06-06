@@ -27,6 +27,7 @@ const topN = ref(5)
 const lastPrice = ref<number | null>(null)
 const loading = ref(true)
 const myBidRow = ref<HTMLElement | null>(null)
+const hasMounted = ref(false)
 
 function isMyBid(entry: BidEntry): boolean {
   return (props.myBidPriceSat ?? []).includes(Math.round(entry.price_sat))
@@ -49,7 +50,10 @@ async function fetchBook() {
     loading.value = false
   }
   await nextTick()
-  myBidRow.value?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+  if (!hasMounted.value) {
+    hasMounted.value = true
+    myBidRow.value?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+  }
 }
 
 // P_N = Nth cheapest bid (ascending from backend) — shown in header only

@@ -48,13 +48,33 @@ async def get_pool_stats():
     }
 
 
+def _parse_hashrate_ph(val) -> float:
+    """Parse solo.braiins.com hashrate strings (e.g. '72.2T', '2.44P') into PH/s."""
+    if not val:
+        return 0.0
+    s = str(val).strip()
+    try:
+        if s.endswith('E'):
+            return float(s[:-1]) * 1000        # EH/s → PH/s
+        if s.endswith('P'):
+            return float(s[:-1])               # already PH/s
+        if s.endswith('T'):
+            return float(s[:-1]) / 1000        # TH/s → PH/s
+        if s.endswith('G'):
+            return float(s[:-1]) / 1_000_000   # GH/s → PH/s
+        return float(s) / 1e15                 # raw H/s → PH/s
+    except ValueError:
+        return 0.0
+
+
 @router.get("/workers")
 async def get_pool_workers():
     """
     Return solo pool workers that received hashrate in the last hour.
-    Hashrate values are converted from raw H/s → PH/s to match the
-    marketplace bid worker format used by WorkerCards.
-    Username / wallet fields are never returned.
+    Hashrate values are converted to PH/s to match the marketplace bid
+    worker format used by WorkerCards. Username / wallet fields are never returned.
+    Note: solo.braiins.com returns hashrates as strings (e.g. "72.2T", "2.44P").
+    The "worker" key (singular) holds the array; "workers" (plural) is just a count.
     """
     cfg = get_settings()
     if not cfg.solo_wallet:
@@ -65,24 +85,22 @@ async def get_pool_workers():
         resp.raise_for_status()
         data = resp.json()
 
-    PH = 1e15  # raw H/s → PH/s
-
-    raw_workers = data.get("workers") or []
+    raw_workers = data.get("worker") or []  # singular "worker" = array; "workers" = int count
     if not isinstance(raw_workers, list):
         raw_workers = []
 
     workers = []
     for w in raw_workers:
-        if w.get("hashrate1hr", 0) <= 0:
+        if _parse_hashrate_ph(w.get("hashrate1hr")) <= 0:
             continue
         workers.append({
             "name": w.get("workername", ""),
             "source": "pool",
             "lastshare_ts": w.get("lastshare", 0),
-            "speed_now_ph": w.get("hashrate1m", 0) / PH,
-            "speed_5m_ph": w.get("hashrate5m", 0) / PH,
-            "speed_1h_ph": w.get("hashrate1hr", 0) / PH,
-            "speed_24h_ph": w.get("hashrate1d", 0) / PH,
+            "speed_now_ph": _parse_hashrate_ph(w.get("hashrate1m")),
+            "speed_5m_ph": _parse_hashrate_ph(w.get("hashrate5m")),
+            "speed_1h_ph": _parse_hashrate_ph(w.get("hashrate1hr")),
+            "speed_24h_ph": _parse_hashrate_ph(w.get("hashrate1d")),
             "shares_m": w.get("shares", 0) / 1e6,
             "bestshare": w.get("bestshare", 0),
         })
