@@ -49,6 +49,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
 
         braiins_lower_limit = int(_market_settings.get("lower_rate_limit_seconds", 1800))
         effective_cooldown = max(cfg.lower_cooldown, braiins_lower_limit)
+        tick_size_sat = int(_market_settings.get("tick_size_sat", 1000))
 
         all_items = await client.get_current_bids()
         active = [item for item in all_items if item.bid.status in ACTIVE_STATUSES]
@@ -78,7 +79,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
         for item in active:
             result = await _evaluate(
                 item, p_n_sat, max_sat, min_sat,
-                effective_cooldown, cfg.top_n,
+                effective_cooldown, cfg.top_n, tick_size_sat,
                 client, db,
             )
             results.append(result)
@@ -107,6 +108,7 @@ async def _evaluate(
     min_sat: float,
     lower_cooldown: int,
     top_n: int,
+    tick_size_sat: int,
     client: BraiinsClient,
     db: Session,
 ) -> dict:
@@ -147,6 +149,10 @@ async def _evaluate(
             )
 
     is_in_top_n = (my_sat <= p_n_sat) if p_n_sat > 0 else False
+
+    # Snap to tick size so Braiins doesn't reject the edit with 400
+    if target_sat is not None and tick_size_sat > 1:
+        target_sat = round(target_sat / tick_size_sat) * tick_size_sat
 
     if target_sat is not None and abs(target_sat - my_sat) > 1:
         try:
@@ -209,12 +215,16 @@ async def run_rank_check(client: BraiinsClient, db: Session) -> dict:
         max_sat = float(cfg.max_bid_price) * SAT
         raises = []
 
+        tick_size_sat = int(_market_settings.get("tick_size_sat", 1000))
+
         for item in active:
             bid = item.bid
             my_sat = bid.price_sat
 
             if my_sat < p_n_sat:
                 target_sat = min(p_n_sat, max_sat)
+                if tick_size_sat > 1:
+                    target_sat = round(target_sat / tick_size_sat) * tick_size_sat
                 if abs(target_sat - my_sat) <= 1:
                     continue
                 reason = (

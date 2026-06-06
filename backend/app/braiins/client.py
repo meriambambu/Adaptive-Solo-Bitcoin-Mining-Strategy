@@ -159,8 +159,8 @@ class BraiinsClient:
         resp = await self._http.put("/spot/bid", json=payload, headers=_headers())
         if not resp.is_success:
             body = resp.text[:300]
-            logger.error("edit_bid failed — bid_id=%r status=%d body=%r",
-                         req.bid_id, resp.status_code, body)
+            logger.error("edit_bid failed — payload=%r status=%d body=%r",
+                         payload, resp.status_code, body)
             raise httpx.HTTPStatusError(
                 f"HTTP {resp.status_code}: {body}",
                 request=resp.request,
