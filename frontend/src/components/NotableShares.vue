@@ -109,9 +109,9 @@ setInterval(fetchStats, 60_000)
         <!-- Time -->
         <span class="col-span-4 font-mono text-gray-500">{{ fmtTime(share.timestamp) }}</span>
 
-        <!-- Worker -->
+        <!-- Worker — show only the part after the first dot (strips wallet address) -->
         <span class="col-span-4 font-mono truncate" :class="isBlock(share.diff) ? 'text-yellow-300' : 'text-gray-400'"
-              :title="share.worker">{{ share.worker }}</span>
+              :title="share.worker">{{ share.worker.includes('.') ? share.worker.split('.').slice(1).join('.') : share.worker }}</span>
 
         <!-- Difficulty + progress bar -->
         <div class="col-span-4 text-right">

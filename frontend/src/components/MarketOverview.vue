@@ -198,9 +198,9 @@ defineExpose({ fetchBook })
 
       <!-- ══ ASKS (red) ══════════════════════════════════════════════════════ -->
       <div v-if="asks.length > 0" class="mt-1">
-        <!-- Column headers -->
+        <!-- Column headers — same proportions as bids for single-line rows -->
         <div class="grid gap-x-1 px-2 pb-1 text-[10px]"
-             style="grid-template-columns: 2.2fr 1fr 1fr 1fr">
+             style="grid-template-columns: 1.6fr 1.3fr 1.3fr 1.3fr">
           <span class="table-header" style="color:rgb(248 113 113 / 0.65)">Price</span>
           <span class="table-header text-right" style="color:rgb(248 113 113 / 0.65)">Limit</span>
           <span class="table-header text-right" style="color:rgb(248 113 113 / 0.65)">Used</span>
@@ -211,23 +211,23 @@ defineExpose({ fetchBook })
           v-for="(ask, i) in displayAsks"
           :key="'a' + i"
           class="grid gap-x-1 px-2 py-0.5 rounded text-xs mb-px hover:opacity-80 transition-opacity"
-          style="grid-template-columns: 2.2fr 1fr 1fr 1fr;
+          style="grid-template-columns: 1.6fr 1.3fr 1.3fr 1.3fr;
                  background:rgb(127 29 29 / 0.12);
                  border:1px solid rgb(127 29 29 / 0.22)"
         >
           <!-- Price -->
           <span class="font-mono text-red-400">{{ ask.price_btc.toFixed(5) }}</span>
           <!-- Limit = total capacity (used + available) -->
-          <span class="text-right font-mono text-red-300/60">
+          <span class="text-right font-mono text-red-300/60 whitespace-nowrap overflow-hidden">
             {{ fmtSpeed(ask.hr_matched_ph + ask.hr_available_ph) }}
           </span>
           <!-- Used (currently matched) -->
-          <span class="text-right font-mono"
+          <span class="text-right font-mono whitespace-nowrap overflow-hidden"
                 :class="ask.hr_matched_ph > 0 ? 'text-red-300/70' : 'text-red-900/70'">
             {{ fmtSpeed(ask.hr_matched_ph) }}
           </span>
           <!-- Available (remaining) -->
-          <span class="text-right font-mono text-red-300/60">
+          <span class="text-right font-mono text-red-300/60 whitespace-nowrap overflow-hidden">
             {{ fmtSpeed(ask.hr_available_ph) }}
           </span>
         </div>
