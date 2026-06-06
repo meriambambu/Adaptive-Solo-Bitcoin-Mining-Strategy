@@ -16,6 +16,7 @@ import type { Order } from './composables/useBids'
 const { orders, loading, fetchOrders, cancelOrder } = useBids()
 const showCreate = ref(false)
 const editOrder = ref<Order | null>(null)
+const marketOverview = ref<InstanceType<typeof MarketOverview> | null>(null)
 
 // ── BTC difficulty ──────────────────────────────────────────────────────────
 const btcDifficulty = ref(0)
@@ -118,7 +119,10 @@ async function fetchPoolStats() {
 // ── WebSocket ───────────────────────────────────────────────────────────────
 const { connected } = useWebSocket((msg: unknown) => {
   const payload = msg as { type: string }
-  if (payload.type === 'strategy_update') fetchOrders()
+  if (payload.type === 'strategy_update') {
+    fetchOrders()
+    marketOverview.value?.fetchBook()
+  }
 })
 
 onMounted(() => {
@@ -208,7 +212,7 @@ function handleEdit(order: Order) {
 
       <!-- Right: market → notable shares → strategy -->
       <div class="space-y-6">
-        <MarketOverview :my-bid-price-sat="orders.map(o => Math.round(o.price_sat))" />
+        <MarketOverview ref="marketOverview" :my-bid-price-sat="orders.map(o => Math.round(o.price_sat))" />
         <NotableShares :btc-difficulty="btcDifficulty" />
         <StrategyPanel />
       </div>

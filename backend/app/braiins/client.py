@@ -90,12 +90,14 @@ class BraiinsClient:
             if not isinstance(item, dict):
                 continue
             nested = item.get("bid") or {}
+            state_est = item.get("state_estimate") or {}
+            counters_est = item.get("counters_estimate") or {}
             m = {**item, **nested}  # inner bid overrides outer on collision
             upstream = None
             if isinstance(m.get("dest_upstream"), dict):
                 upstream = UpstreamSpec(**m["dest_upstream"])
             amount_sat = float(m.get("amount_sat") or 0)
-            consumed_sat = float(m.get("consumed_sat") or 0)
+            consumed_sat = float(counters_est.get("amount_consumed_sat") or 0)
             bid = SpotBid(
                 id=str(m.get("id") or m.get("bid_id") or ""),
                 price_sat=float(m.get("price_sat") or 0),
@@ -108,17 +110,25 @@ class BraiinsClient:
                 dest_upstream=upstream,
             )
             state = BidState(
-                avg_speed_ph=float(m.get("hr_matched_ph") or 0),
-                amount_remaining_sat=max(0.0, amount_sat - consumed_sat),
-                progress_pct=round(consumed_sat / amount_sat * 100, 1) if amount_sat > 0 else 0,
+                avg_speed_ph=float(state_est.get("avg_speed_ph") or 0),
+                amount_remaining_sat=float(state_est.get("amount_remaining_sat") or max(0.0, amount_sat - consumed_sat)),
+                progress_pct=float(state_est.get("progress_pct") or 0),
             )
-            counters = BidCounters(amount_consumed_sat=consumed_sat)
+            counters = BidCounters(
+                amount_consumed_sat=consumed_sat,
+                shares_purchased_m=float(counters_est.get("shares_purchased_m") or 0),
+            )
             result.append(BidResponseItem(bid=bid, state_estimate=state, counters_estimate=counters))
         return result
 
     async def get_current_bids(self) -> list[BidResponseItem]:
         data = await self._get("/spot/bid/current")
-        return self._parse_bid_items(data.get("items") or [])
+        raw_items = data.get("items") or []
+        for item in raw_items:
+            nested = item.get("bid") or {}
+            raw_status = nested.get("status") or item.get("status") or item.get("state") or "?"
+            logger.debug("bid id=%s raw_status=%r", nested.get("id") or item.get("id"), raw_status)
+        return self._parse_bid_items(raw_items)
 
     async def get_all_bids(self, limit: int = 100) -> list[BidResponseItem]:
         data = await self._get("/spot/bid", {"limit": limit})

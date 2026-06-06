@@ -104,6 +104,7 @@ function fmtEta(entry: BidEntry): string {
 
 onMounted(fetchBook)
 setInterval(fetchBook, 30_000)
+defineExpose({ fetchBook })
 </script>
 
 <template>

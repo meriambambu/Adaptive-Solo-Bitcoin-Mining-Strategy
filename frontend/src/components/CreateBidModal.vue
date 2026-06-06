@@ -8,7 +8,7 @@ const form = ref({
   price_btc: '',
   amount_btc: '',
   speed_limit_ph: '0',
-  pool_url: 'stratum+tcp://public.stratum.braiins.com:3333',
+  pool_url: 'stratum+tcp://solo.stratum.braiins.com:3333',
   pool_identity: '',
   memo: '',
 })
