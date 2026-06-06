@@ -158,7 +158,7 @@ setInterval(fetchAll, 30_000)
             :class="worker.hasHashrate ? 'text-brand-purple-light' : 'text-gray-500'"
             :title="worker.name"
           >
-            {{ worker.source === 'pool' && worker.name.includes('.')
+            {{ worker.name.includes('.')
               ? worker.name.split('.').slice(1).join('.')
               : worker.name }}
           </div>
