@@ -1,9 +1,8 @@
 """
 Braiins Hash Power API client.
 
-Base URL:  https://hashpower.braiins.com/api/v1
-Auth:      Authorization: Bearer <BRAIINS_API_KEY>
-Spec:      https://hashpower.braiins.com/api/openapi.yml
+Base URL:  https://hashpower.braiins.com/v1
+Auth:      apikey: <BRAIINS_API_KEY>  (header, lowercase)
 
 All prices in the API are in satoshi (integer).
 Helper SAT = 100_000_000 converts BTC ↔ sat.
@@ -11,6 +10,7 @@ Speed is always in PH/s (1 EH/s = 1000 PH/s).
 """
 
 import logging
+import uuid
 from typing import Any, Optional
 
 import httpx
@@ -29,7 +29,7 @@ from app.braiins.models import (
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://hashpower.braiins.com"
+BASE_URL = "https://hashpower.braiins.com/v1"
 
 
 def _headers() -> dict[str, str]:
@@ -74,77 +74,107 @@ class BraiinsClient:
         resp.raise_for_status()
         return self._parse(resp)
 
-    async def _delete(self, path: str, params: Optional[dict] = None) -> Any:
-        resp = await self._http.delete(path, params=params, headers=_headers())
+    async def _delete(self, path: str) -> Any:
+        resp = await self._http.delete(path, headers=_headers())
         resp.raise_for_status()
+        if not resp.content:
+            return None
         return self._parse(resp)
 
     # ── Bids ──────────────────────────────────────────────────────────────────
 
+    def _parse_bid_items(self, raw_items: list) -> list[BidResponseItem]:
+        from app.braiins.models import BidCounters, BidState, SpotBid, UpstreamSpec
+        result = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            nested = item.get("bid") or {}
+            m = {**item, **nested}  # inner bid overrides outer on collision
+            upstream = None
+            if isinstance(m.get("dest_upstream"), dict):
+                upstream = UpstreamSpec(**m["dest_upstream"])
+            amount_sat = float(m.get("amount_sat") or 0)
+            consumed_sat = float(m.get("consumed_sat") or 0)
+            bid = SpotBid(
+                id=str(m.get("id") or m.get("bid_id") or ""),
+                price_sat=float(m.get("price_sat") or 0),
+                status=str(m.get("status") or m.get("state") or ""),
+                amount_sat=amount_sat,
+                speed_limit_ph=float(m.get("speed_limit_ph") or 0),
+                created=m.get("created"),
+                memo=str(m.get("memo") or ""),
+                fee_rate_pct=float(m.get("fee_rate_pct") or 0),
+                dest_upstream=upstream,
+            )
+            state = BidState(
+                avg_speed_ph=float(m.get("hr_matched_ph") or 0),
+                amount_remaining_sat=max(0.0, amount_sat - consumed_sat),
+                progress_pct=round(consumed_sat / amount_sat * 100, 1) if amount_sat > 0 else 0,
+            )
+            counters = BidCounters(amount_consumed_sat=consumed_sat)
+            result.append(BidResponseItem(bid=bid, state_estimate=state, counters_estimate=counters))
+        return result
+
     async def get_current_bids(self) -> list[BidResponseItem]:
-        data = await self._get("/webapi/spot/bid/current")
-        # Response: {"bids": [...]}
-        raw_bids = data.get("bids") or []
-        return [BidResponseItem(**b) for b in raw_bids]
+        data = await self._get("/spot/bid/current")
+        return self._parse_bid_items(data.get("items") or [])
 
     async def get_all_bids(self, limit: int = 100) -> list[BidResponseItem]:
-        data = await self._get("/webapi/spot/bid", {"limit": limit})
-        raw_bids = data.get("bids") or data.get("items") or []
-        return [BidResponseItem(**b) for b in raw_bids]
+        data = await self._get("/spot/bid", {"limit": limit})
+        return self._parse_bid_items(data.get("items") or [])
 
     async def place_bid(self, req: PlaceBidRequest) -> dict:
-        """
-        Create bid via /webapi/confirmation/create (requires a two-step confirmation).
-        Returns the confirmation token for display to the user.
-        """
-        bid_data: dict[str, Any] = {
+        """Create bid via POST /spot/bid — direct, no confirmation required."""
+        payload: dict[str, Any] = {
+            "cl_order_id": str(uuid.uuid4()),
             "price_sat": round(req.price_btc * SAT),
             "amount_sat": round(req.amount_btc * SAT),
             "dest_upstream": {"url": req.pool_url, "identity": req.pool_identity},
         }
         if req.speed_limit_ph > 0:
-            bid_data["speed_limit_ph"] = req.speed_limit_ph
+            payload["speed_limit_ph"] = req.speed_limit_ph
         if req.memo:
-            bid_data["memo"] = req.memo
-
-        payload = {
-            "requestType": "spot_bid_create",
-            "requestData": bid_data,
-        }
-        return await self._post("/webapi/confirmation/create", payload)
+            payload["memo"] = req.memo
+        return await self._post("/spot/bid", payload)
 
     async def edit_bid(self, req: EditBidRequest) -> None:
-        payload: dict[str, Any] = {
-            "bid_id": req.bid_id,
-            "audit_source": "adaptive_bot",
-        }
+        payload: dict[str, Any] = {"bid_id": req.bid_id}
         if req.new_price_btc is not None:
             payload["new_price_sat"] = round(req.new_price_btc * SAT)
         if req.new_amount_btc is not None:
             payload["new_amount_sat"] = round(req.new_amount_btc * SAT)
         if req.new_speed_limit_ph is not None:
-            payload["new_speed_limit_ph"] = req.new_speed_limit_ph
-        await self._put("/webapi/spot/bid", payload)
+            payload["new_speed_limit_ph"] = {"value": req.new_speed_limit_ph}
+        resp = await self._http.put("/spot/bid", json=payload, headers=_headers())
+        if not resp.is_success:
+            logger.error("edit_bid failed — bid_id=%r status=%d body=%r",
+                         req.bid_id, resp.status_code, resp.text[:500])
+        resp.raise_for_status()
 
     async def cancel_bid(self, order_id: str) -> dict:
-        return await self._delete("/webapi/spot/bid", {"bid_id": order_id})
+        resp = await self._http.delete("/spot/bid", params={"order_id": order_id}, headers=_headers())
+        resp.raise_for_status()
+        if not resp.content:
+            return {}
+        return self._parse(resp)
 
     # ── Market ────────────────────────────────────────────────────────────────
 
     async def get_order_book(self) -> OrderBook:
-        data = await self._get("/webapi/orderbook")
+        data = await self._get("/spot/orderbook")
         return OrderBook(**data)
 
     async def get_market_settings(self) -> dict:
-        return await self._get("/webapi/spot/settings")
+        return await self._get("/spot/settings")
 
     async def get_market_stats(self) -> dict:
-        return await self._get("/webapi/spot/stats")
+        return await self._get("/spot/stats")
 
     # ── Account ───────────────────────────────────────────────────────────────
 
     async def get_balance(self) -> AccountBalance:
-        data = await self._get("/webapi/account/balance")
+        data = await self._get("/account/balance")
         resp = BalancesResponse(**data)
         for acct in resp.accounts:
             return acct

@@ -67,8 +67,12 @@ async def get_pool_workers():
 
     PH = 1e15  # raw H/s → PH/s
 
+    raw_workers = data.get("workers") or []
+    if not isinstance(raw_workers, list):
+        raw_workers = []
+
     workers = []
-    for w in (data.get("workers") or []):
+    for w in raw_workers:
         if w.get("hashrate1hr", 0) <= 0:
             continue
         workers.append({

@@ -46,7 +46,7 @@ async function submit() {
         <button @click="emit('close')" class="text-gray-500 hover:text-white text-xl leading-none">&times;</button>
       </div>
 
-      <!-- Body -->
+      <!-- Form -->
       <form @submit.prevent="submit" class="px-6 py-4 space-y-4">
         <div class="grid grid-cols-2 gap-4">
           <div>
