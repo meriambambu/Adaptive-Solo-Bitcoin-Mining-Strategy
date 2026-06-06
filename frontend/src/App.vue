@@ -212,8 +212,8 @@ function handleEdit(order: Order) {
 
       <!-- Right: market → notable shares → strategy -->
       <div class="space-y-6">
-        <MarketOverview ref="marketOverview" :my-bid-price-sat="orders.map(o => Math.round(o.price_sat))" />
         <NotableShares :btc-difficulty="btcDifficulty" />
+        <MarketOverview ref="marketOverview" :my-bid-price-sat="orders.map(o => Math.round(o.price_sat))" />
         <StrategyPanel />
       </div>
     </main>
