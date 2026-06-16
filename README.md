@@ -61,8 +61,8 @@ An open-source adaptive bidding bot and real-time dashboard for the [Braiins Has
 ### 1 — Clone & configure
 
 ```bash
-git clone https://github.com/your-username/adaptive-bitcoin-mining.git
-cd adaptive-bitcoin-mining
+git clone https://github.com/meriambambu/Adaptive-Solo-Bitcoin-Mining-Strategy.git
+cd Adaptive-Solo-Bitcoin-Mining-Strategy
 
 # Copy and fill in your credentials
 cp backend/.env.example backend/.env
@@ -200,7 +200,7 @@ The price target is always exactly P_N — never a guessed offset above or below
 
 ### What the bot does NOT do
 
-- **Does not create orders** — use the dashboard's **+ Create** button
+- **Does not auto-create orders** — the strategy only adjusts prices on existing bids; create new orders yourself with the dashboard's **+ Create** button
 - **Does not cancel orders** — use the dashboard's cancel (×) button
 - **Does not manage budget** — you set the BTC amount when creating an order
 - **Does not raise beyond MAX_BID_PRICE** — ever
