@@ -6,6 +6,14 @@ An open-source adaptive bidding bot and real-time dashboard for the [Braiins Has
 
 ---
 
+## Screenshots
+
+| Desktop | Mobile |
+|:---:|:---:|
+| <img src="screenshot-desktop.png" alt="Desktop dashboard" width="420"> | <img src="screenshot-mobile.png" alt="Mobile dashboard" width="200"> |
+
+---
+
 ## Features
 
 - **Adaptive bidding** — pure P_N tracking from the live order book: raises to P_N when below, lowers to P_N when above, holds when equal. No guesses, no arbitrary offsets — the market sets the price
