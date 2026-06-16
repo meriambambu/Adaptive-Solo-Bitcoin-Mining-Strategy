@@ -33,7 +33,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
 
     if not cfg.strategy_enabled:
         logger.info("Strategy disabled — skipping cycle")
-        return {"action": "DISABLED", "timestamp": datetime.utcnow().isoformat()}
+        return {"action": "DISABLED", "timestamp": datetime.utcnow().isoformat() + "Z"}
 
     results: list[dict] = []
 
@@ -58,7 +58,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
             _log(db, order_id="none", action="IDLE",
                  reason="No active bids — strategy idle until a bid is created manually")
             db.commit()
-            return {"action": "IDLE", "timestamp": datetime.utcnow().isoformat()}
+            return {"action": "IDLE", "timestamp": datetime.utcnow().isoformat() + "Z"}
 
         book = await client.get_order_book()
         active_book = [b for b in book.bids if b.hr_matched_ph > 0]
@@ -88,7 +88,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
         db.commit()
         return {
             "action": "CYCLE_COMPLETE",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
             "market_p_n_btc": round(p_n_btc, 8),
             "market_p_n_sat": p_n_sat,
             "orders": results,
@@ -98,7 +98,7 @@ async def run_strategy_cycle(client: BraiinsClient, db: Session) -> dict:
         logger.error("Strategy cycle error: %s", exc)
         _log(db, order_id="none", action="ERROR", reason=str(exc))
         db.commit()
-        return {"action": "ERROR", "timestamp": datetime.utcnow().isoformat(), "error": str(exc)}
+        return {"action": "ERROR", "timestamp": datetime.utcnow().isoformat() + "Z", "error": str(exc)}
 
 
 async def _evaluate(

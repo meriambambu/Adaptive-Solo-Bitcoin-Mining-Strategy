@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # BTC wallet address for solo.braiins.com stats — never exposed in responses
     solo_wallet: str = ""
 
+    # mempool.space base URL for recent-blocks proxy (override in .env if geo-blocked)
+    mempool_base: str = "https://mempool.oszids.synology.me/"
+
     # Strategy parameters (all editable at runtime via /api/settings)
     top_n: int = 5
     max_bid_price: Decimal = Decimal("0.60")

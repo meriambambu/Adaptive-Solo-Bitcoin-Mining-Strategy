@@ -1,11 +1,14 @@
 """Braiins Solo pool notable shares and BTC network difficulty."""
 
+import time
 import httpx
 from fastapi import APIRouter, HTTPException
 
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/pool", tags=["pool"])
+
+ACTIVE_WINDOW_SECONDS = 2 * 60 * 60  # worker is active if last share was within 2 hours
 
 SOLO_BASE = "https://solo.braiins.com/users"
 DIFFICULTY_URL = "https://blockchain.info/q/getdifficulty"
@@ -89,9 +92,10 @@ async def get_pool_workers():
     if not isinstance(raw_workers, list):
         raw_workers = []
 
+    now = int(time.time())
     workers = []
     for w in raw_workers:
-        if _parse_hashrate_ph(w.get("hashrate1hr")) <= 0:
+        if (now - int(w.get("lastshare") or 0)) > ACTIVE_WINDOW_SECONDS:
             continue
         workers.append({
             "name": w.get("workername", ""),
@@ -114,3 +118,23 @@ async def get_btc_difficulty():
         resp = await client.get(DIFFICULTY_URL)
         resp.raise_for_status()
         return {"difficulty": float(resp.text.strip())}
+
+
+@router.get("/blocks")
+async def get_recent_blocks():
+    """Recent BTC blocks solved network-wide, from mempool.space (public, no auth)."""
+    cfg = get_settings()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(f"{cfg.mempool_base.rstrip('/')}/api/v1/blocks")
+        resp.raise_for_status()
+        data = resp.json()
+
+    blocks = [
+        {
+            "height": b["height"],
+            "timestamp": b["timestamp"],
+            "pool": (b.get("extras") or {}).get("pool", {}).get("name") or "Unknown",
+        }
+        for b in (data or [])[:10]
+    ]
+    return {"blocks": blocks}

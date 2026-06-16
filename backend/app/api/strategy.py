@@ -31,7 +31,7 @@ async def get_logs(limit: int = 50, db: Session = Depends(get_db)):
     return [
         {
             "id": log.id,
-            "timestamp": log.timestamp.isoformat(),
+            "timestamp": log.timestamp.isoformat() + "Z",
             "order_id": log.order_id,
             "action": log.action,
             "old_price": str(log.old_price) if log.old_price else None,

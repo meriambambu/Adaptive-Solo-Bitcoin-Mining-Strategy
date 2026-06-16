@@ -54,15 +54,16 @@ const confirmCancel = ref<string | null>(null)
       No active bids. Click <strong>+ Create</strong> to place one.
     </div>
 
-    <table v-else class="w-full text-sm">
+    <div v-else class="overflow-x-auto">
+    <table class="w-full text-sm whitespace-nowrap">
       <thead>
         <tr class="border-b border-surface-600">
           <th class="table-header text-left pb-2 w-40">Bid ID</th>
           <th class="table-header text-right pb-2">Price<br><span class="normal-case font-normal text-gray-600">(₿/EHs/day)</span></th>
           <th class="table-header text-right pb-2">Budget<br><span class="normal-case font-normal text-gray-600">(BTC)</span></th>
-          <th class="table-header text-right pb-2">Limit/Speed<br><span class="normal-case font-normal text-gray-600">(EH/s)</span></th>
-          <th class="table-header text-right pb-2">Created</th>
-          <th class="table-header text-right pb-2">Remaining</th>
+          <th class="table-header text-right pb-2">Limit/Speed<br><span class="normal-case font-normal text-gray-600">(PH/s)</span></th>
+          <th class="table-header text-right pb-2 hidden sm:table-cell">Created</th>
+          <th class="table-header text-right pb-2 hidden sm:table-cell">Remaining</th>
           <th class="table-header text-right pb-2">Progress</th>
           <th class="table-header text-right pb-2">Actions</th>
         </tr>
@@ -115,12 +116,12 @@ const confirmCancel = ref<string | null>(null)
           </td>
 
           <!-- CREATED -->
-          <td class="py-3 text-right text-gray-400 text-xs">
+          <td class="py-3 text-right text-gray-400 text-xs hidden sm:table-cell">
             {{ formatDate(order.created) }}
           </td>
 
           <!-- REMAINING -->
-          <td class="py-3 text-right text-gray-400 text-xs font-mono">
+          <td class="py-3 text-right text-gray-400 text-xs font-mono hidden sm:table-cell">
             ₿{{ order.amount_remaining_btc.toFixed(8) }}
           </td>
 
@@ -168,5 +169,6 @@ const confirmCancel = ref<string | null>(null)
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 </template>

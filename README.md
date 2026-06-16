@@ -14,6 +14,7 @@ An open-source adaptive bidding bot and real-time dashboard for the [Braiins Has
 - **Order book** — bids in green, asks in red, spread bar; your position auto-highlighted
 - **Active worker cards** — per-bid hashrate breakdown (5 min / 1 hr / 24 h from snapshot history)
 - **Notable shares log** — live feed from Braiins Solo Pool with difficulty progress vs network target
+- **Recent blocks** — live feed of the 10 most recently solved BTC blocks network-wide (height + mining pool) from mempool.space
 - **BTC network difficulty** — live in the header, auto-refreshes every 5 minutes
 - **Block celebration** — full-screen overlay + audio when a block is solved (see [Audio](#audio))
 - **Strategy log** — full audit trail of every RAISE / LOWER / HOLD / IDLE decision
@@ -217,6 +218,7 @@ The price target is always exactly P_N — never a guessed offset above or below
 | **Strategy Settings** | Edit all parameters live; enable/disable; manual trigger |
 | **Strategy Log** | Timestamped log of every RAISE / LOWER / HOLD / IDLE decision |
 | **Notable Shares** | Solo pool notable share feed with difficulty bar vs network target |
+| **Recent Blocks** | 10 most recently solved BTC blocks network-wide: time, mining pool, height |
 | **Balance Bar** | Available BTC, total balance, blocked |
 | **Header** | BTC network difficulty (auto-refresh) + WebSocket Live indicator |
 
@@ -237,6 +239,7 @@ The price target is always exactly P_N — never a guessed offset above or below
 | GET | `/api/market/stats` | Market stats (best bid/ask, hashrate) |
 | GET | `/api/pool/stats` | Solo pool notable shares + hashrate |
 | GET | `/api/pool/difficulty` | Current BTC network difficulty |
+| GET | `/api/pool/blocks` | 10 most recent BTC blocks (height + pool) from mempool.space |
 | GET | `/api/settings` | Current strategy settings |
 | PATCH | `/api/settings` | Update strategy settings live |
 | POST | `/api/strategy/evaluate` | Manual strategy cycle trigger |

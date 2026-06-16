@@ -5,6 +5,7 @@ import BidsTable from './components/BidsTable.vue'
 import BidHistory from './components/BidHistory.vue'
 import WorkerCards from './components/WorkerCards.vue'
 import NotableShares from './components/NotableShares.vue'
+import RecentBlocks from './components/RecentBlocks.vue'
 import CreateBidModal from './components/CreateBidModal.vue'
 import MarketOverview from './components/MarketOverview.vue'
 import StrategyPanel from './components/StrategyPanel.vue'
@@ -25,7 +26,7 @@ function fmtDifficulty(d: number): string {
   if (d <= 0) return '…'
   if (d >= 1e15) return (d / 1e15).toFixed(2) + 'P'
   if (d >= 1e12) return (d / 1e12).toFixed(2) + 'T'
-  if (d >= 1e9)  return (d / 1e9).toFixed(2) + 'B'
+  if (d >= 1e9)  return (d / 1e9).toFixed(2) + 'G'
   return d.toLocaleString()
 }
 
@@ -167,14 +168,14 @@ function handleEdit(order: Order) {
     <header class="flex items-center justify-between px-6 py-3 bg-surface-800 border-b border-surface-600">
       <div class="flex items-center gap-3">
         <svg class="h-6 w-6 text-brand-purple" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z"/>
+          <path d="M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.546zM14.772 8.3c.24-1.607-.983-2.468-2.655-3.044l.542-2.174-1.323-.33-.528 2.117c-.347-.087-.705-.17-1.06-.251l.532-2.13-1.322-.33-.543 2.173c-.288-.066-.57-.13-.842-.198l.001-.007-1.824-.456-.352 1.413s.983.225.963.239c.537.134.634.49.617.772l-1.486 5.962c-.113.281-.4.703-1.048.543.023.033-.963-.24-.963-.24L4.4 13.2l1.72.43c.32.08.634.163.943.242l-.549 2.2 1.322.33.543-2.175c.36.098.71.188 1.053.273l-.541 2.165 1.322.33.549-2.195c2.263.428 3.965.255 4.679-1.792.577-1.651-.029-2.604-1.222-3.226.87-.2 1.525-.772 1.699-1.952l.003.002zm-3.044 4.267c-.41 1.651-3.183.759-4.083.535l.729-2.92c.9.225 3.787.67 3.354 2.385zm.41-4.29c-.374 1.5-2.685.737-3.437.551l.661-2.648c.752.188 3.175.538 2.776 2.097z"/>
         </svg>
         <span class="font-bold text-sm tracking-tight">Adaptive Bitcoin Mining</span>
       </div>
 
       <div class="flex items-center gap-4 text-xs">
-        <!-- BTC Difficulty -->
-        <div class="flex items-center gap-1.5 text-gray-400">
+        <!-- BTC Difficulty (hidden on xs screens) -->
+        <div class="hidden sm:flex items-center gap-1.5 text-gray-400">
           <span class="text-gray-600">Difficulty</span>
           <span class="font-mono font-semibold text-amber-400">{{ fmtDifficulty(btcDifficulty) }}</span>
         </div>
@@ -213,6 +214,7 @@ function handleEdit(order: Order) {
       <!-- Right: market → notable shares → strategy -->
       <div class="space-y-6">
         <NotableShares :btc-difficulty="btcDifficulty" />
+        <RecentBlocks />
         <MarketOverview ref="marketOverview" :my-bid-price-sat="orders.map(o => Math.round(o.price_sat))" />
         <StrategyPanel />
       </div>

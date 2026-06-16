@@ -18,7 +18,7 @@ const loading = ref(true)
 
 function fmtDiff(d: number): string {
   if (d >= 1e12) return (d / 1e12).toFixed(2) + 'T'
-  if (d >= 1e9) return (d / 1e9).toFixed(2) + 'B'
+  if (d >= 1e9) return (d / 1e9).toFixed(2) + 'G'
   if (d >= 1e6) return (d / 1e6).toFixed(2) + 'M'
   return d.toLocaleString()
 }
@@ -121,14 +121,6 @@ setInterval(fetchStats, 60_000)
               :class="isBlock(share.diff) ? 'text-yellow-300' : 'text-orange-400'"
             >{{ fmtDiff(share.diff) }}</span>
             <span v-if="isBlock(share.diff)" class="text-[9px] font-bold text-yellow-300 bg-yellow-900 px-1 rounded">BLOCK!</span>
-          </div>
-          <!-- Progress bar: share diff vs current BTC difficulty -->
-          <div v-if="btcDifficulty > 0" class="mt-0.5 h-0.5 rounded bg-surface-600 overflow-hidden">
-            <div
-              class="h-full rounded transition-all"
-              :class="isBlock(share.diff) ? 'bg-yellow-400' : 'bg-orange-600'"
-              :style="{ width: diffProgress(share.diff) + '%' }"
-            ></div>
           </div>
         </div>
       </div>

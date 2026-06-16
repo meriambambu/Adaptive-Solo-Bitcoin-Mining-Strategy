@@ -138,7 +138,8 @@ defineExpose({ fetchBook })
 
     <div v-if="loading" class="py-6 text-center text-gray-500 text-sm">Loading…</div>
 
-    <div v-else class="max-h-[34rem] overflow-y-auto">
+    <div v-else class="overflow-x-auto">
+    <div class="max-h-[34rem] overflow-y-auto min-w-[280px]">
 
       <!-- ══ BIDS (green) ════════════════════════════════════════════════════ -->
       <div class="mb-1">
@@ -237,6 +238,7 @@ defineExpose({ fetchBook })
         </div>
       </div>
 
+    </div>
     </div>
   </div>
 </template>

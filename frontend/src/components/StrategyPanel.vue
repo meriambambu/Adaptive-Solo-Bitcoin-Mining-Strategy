@@ -39,6 +39,11 @@ const saveMsg = ref('')
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
+function fmtLogTime(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`
+}
+
 const actionColor: Record<string, string> = {
   RAISE: 'text-green-400',
   LOWER: 'text-yellow-400',
@@ -131,7 +136,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3 text-xs">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
         <div>
           <label class="block text-gray-500 mb-1">Stay in top N bids</label>
           <input v-model.number="settings.top_n" type="number" min="1" max="20" class="input" />
@@ -182,7 +187,7 @@ onMounted(async () => {
           <span class="font-bold w-14 flex-shrink-0" :class="actionColor[log.action] || 'text-gray-400'">
             {{ log.action }}
           </span>
-          <span class="text-gray-600 flex-shrink-0 font-mono">{{ log.timestamp.slice(11, 19) }}</span>
+          <span class="text-gray-600 flex-shrink-0 font-mono">{{ fmtLogTime(log.timestamp) }}</span>
           <span class="text-gray-400 truncate">{{ log.reason }}</span>
         </div>
       </div>
