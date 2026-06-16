@@ -53,3 +53,6 @@ apscheduler.sqlite
 # Local-only project docs (never publish)
 CLAUDE.md
 docs/
+
+# MCP browser-automation scratch captures
+.playwright-mcp/

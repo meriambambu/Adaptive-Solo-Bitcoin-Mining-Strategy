@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     solo_wallet: str = ""
 
     # mempool.space base URL for recent-blocks proxy (override in .env if geo-blocked)
-    mempool_base: str = "https://mempool.oszids.synology.me/"
+    mempool_base: str = "https://mempool.space"
 
     # Strategy parameters (all editable at runtime via /api/settings)
     top_n: int = 5
